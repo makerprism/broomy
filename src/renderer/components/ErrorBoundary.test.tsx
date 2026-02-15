@@ -2,14 +2,24 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, cleanup } from '@testing-library/react'
 import '../../test/react-setup'
+import { allowConsoleError } from '../../test/console-guard'
 import ErrorBoundary from './ErrorBoundary'
 import { useErrorStore } from '../store/errors'
+
+// Suppress jsdom printing thrown errors to stderr (not console.error — jsdom
+// dispatches an 'error' event that writes to process.stderr directly).
+const suppressJsdomErrors = () => {
+  const handler = (e: Event) => e.preventDefault()
+  window.addEventListener('error', handler)
+  return () => window.removeEventListener('error', handler)
+}
 
 afterEach(() => {
   cleanup()
 })
 
 beforeEach(() => {
+  allowConsoleError()
   vi.clearAllMocks()
   useErrorStore.setState({
     errors: [],
@@ -37,8 +47,7 @@ describe('ErrorBoundary', () => {
   })
 
   it('shows error UI when a child throws', () => {
-    // Suppress React error boundary console logging in tests
-    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const cleanup = suppressJsdomErrors()
     render(
       <ErrorBoundary>
         <ThrowingComponent shouldThrow={true} />
@@ -47,11 +56,11 @@ describe('ErrorBoundary', () => {
     expect(screen.getByText('Something went wrong')).toBeTruthy()
     expect(screen.getByText('Test render error')).toBeTruthy()
     expect(screen.getByText('Try Again')).toBeTruthy()
-    spy.mockRestore()
+    cleanup()
   })
 
   it('adds error to error store when a child throws', () => {
-    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const cleanup = suppressJsdomErrors()
     render(
       <ErrorBoundary>
         <ThrowingComponent shouldThrow={true} />
@@ -60,11 +69,11 @@ describe('ErrorBoundary', () => {
     const state = useErrorStore.getState()
     expect(state.errors.length).toBe(1)
     expect(state.errors[0].message).toContain('Unhandled render error: Test render error')
-    spy.mockRestore()
+    cleanup()
   })
 
   it('resets error state when Try Again is clicked', () => {
-    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const cleanup = suppressJsdomErrors()
 
     render(
       <ErrorBoundary>
@@ -86,11 +95,11 @@ describe('ErrorBoundary', () => {
     // After clicking try again with a still-throwing child, the error boundary
     // catches the error again and shows the error UI
     expect(screen.getByText('Something went wrong')).toBeTruthy()
-    spy.mockRestore()
+    cleanup()
   })
 
   it('shows generic message when error.message is empty', () => {
-    const spy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const cleanup = suppressJsdomErrors()
     function EmptyErrorComponent() {
       throw new Error('')
     }
@@ -101,6 +110,6 @@ describe('ErrorBoundary', () => {
     )
     // With empty message, it should show the fallback text
     expect(screen.getByText('An unexpected error occurred.')).toBeTruthy()
-    spy.mockRestore()
+    cleanup()
   })
 })
