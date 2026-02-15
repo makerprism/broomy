@@ -33,22 +33,22 @@ describe('SCPrBanner', () => {
   })
 
   it('renders PR status with number and title', () => {
-    const prStatus = { number: 42, title: 'Add feature', state: 'OPEN', url: 'https://github.com/test/pr/42' }
+    const prStatus = { number: 42, title: 'Add feature', state: 'OPEN' as const, url: 'https://github.com/test/pr/42', headRefName: 'feature/test', baseRefName: 'main' }
     render(<SCPrBanner {...defaultProps} prStatus={prStatus} />)
     expect(screen.getByText('OPEN')).toBeTruthy()
     expect(screen.getByText(/#42: Add feature/)).toBeTruthy()
   })
 
   it('opens PR URL in external browser when clicked', () => {
-    const prStatus = { number: 42, title: 'Add feature', state: 'OPEN', url: 'https://github.com/test/pr/42' }
+    const prStatus = { number: 42, title: 'Add feature', state: 'OPEN' as const, url: 'https://github.com/test/pr/42', headRefName: 'feature/test', baseRefName: 'main' }
     render(<SCPrBanner {...defaultProps} prStatus={prStatus} />)
     fireEvent.click(screen.getByText(/#42: Add feature/))
     expect(window.shell.openExternal).toHaveBeenCalledWith('https://github.com/test/pr/42')
   })
 
   it('shows sync button when PR is open and no uncommitted changes', () => {
-    const prStatus = { number: 42, title: 'Add feature', state: 'OPEN', url: 'https://github.com/test/pr/42' }
-    const syncStatus = { current: 'feature/test', tracking: 'origin/feature/test', ahead: 0, behind: 0 }
+    const prStatus = { number: 42, title: 'Add feature', state: 'OPEN' as const, url: 'https://github.com/test/pr/42', headRefName: 'feature/test', baseRefName: 'main' }
+    const syncStatus = { current: 'feature/test', tracking: 'origin/feature/test', ahead: 0, behind: 0, files: [] }
     render(
       <SCPrBanner
         {...defaultProps}
@@ -62,8 +62,8 @@ describe('SCPrBanner', () => {
 
   it('calls onSyncWithMain when sync button is clicked', () => {
     const onSyncWithMain = vi.fn()
-    const prStatus = { number: 42, title: 'Add feature', state: 'OPEN', url: 'https://github.com/test/pr/42' }
-    const syncStatus = { current: 'feature/test', tracking: 'origin/feature/test', ahead: 0, behind: 0 }
+    const prStatus = { number: 42, title: 'Add feature', state: 'OPEN' as const, url: 'https://github.com/test/pr/42', headRefName: 'feature/test', baseRefName: 'main' }
+    const syncStatus = { current: 'feature/test', tracking: 'origin/feature/test', ahead: 0, behind: 0, files: [] }
     render(
       <SCPrBanner
         {...defaultProps}
@@ -78,8 +78,8 @@ describe('SCPrBanner', () => {
   })
 
   it('shows Syncing... when syncing with main', () => {
-    const prStatus = { number: 42, title: 'Add feature', state: 'OPEN', url: 'https://github.com/test/pr/42' }
-    const syncStatus = { current: 'feature/test', tracking: 'origin/feature/test', ahead: 0, behind: 0 }
+    const prStatus = { number: 42, title: 'Add feature', state: 'OPEN' as const, url: 'https://github.com/test/pr/42', headRefName: 'feature/test', baseRefName: 'main' }
+    const syncStatus = { current: 'feature/test', tracking: 'origin/feature/test', ahead: 0, behind: 0, files: [] }
     render(
       <SCPrBanner
         {...defaultProps}

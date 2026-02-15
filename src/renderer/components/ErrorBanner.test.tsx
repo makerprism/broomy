@@ -47,7 +47,7 @@ describe('ErrorBanner', () => {
     const dismissButton = screen.getByTitle('Dismiss')
     fireEvent.click(dismissButton)
     const state = useErrorStore.getState()
-    const dismissed = state.errors.find((e) => e.id === mockError.id)
+    state.errors.find((e) => e.id === mockError.id)
     // Since errors list is empty in our test, just verify dismissError was called
     // The store action marks the error as dismissed
     expect(dismissButton).toBeTruthy()

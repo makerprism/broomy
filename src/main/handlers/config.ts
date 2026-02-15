@@ -1,6 +1,6 @@
 import { IpcMain } from 'electron'
-import { existsSync, mkdirSync, readFileSync, writeFileSync, copyFileSync, readdirSync } from 'fs'
-import { readFile, writeFile, rename, copyFile, mkdir } from 'fs/promises'
+import { existsSync, mkdirSync, writeFileSync, copyFileSync, readdirSync } from 'fs'
+import { readFile, writeFile, rename, copyFile, mkdir, access } from 'fs/promises'
 import { join } from 'path'
 import { makeExecutable } from '../platform'
 import {
@@ -25,6 +25,7 @@ function getLegacyConfigFile(isDev: boolean): string {
 }
 
 // Migrate legacy config to default profile (one-time migration)
+// Stays sync because it runs once at startup before any IPC handlers
 function migrateToProfiles(isE2ETest: boolean, isDev: boolean): void {
   if (isE2ETest) return
 
@@ -61,6 +62,15 @@ function migrateToProfiles(isE2ETest: boolean, isDev: boolean): void {
   writeFileSync(PROFILES_FILE, JSON.stringify(DEFAULT_PROFILES, null, 2))
 }
 
+async function fileExists(filePath: string): Promise<boolean> {
+  try {
+    await access(filePath)
+    return true
+  } catch {
+    return false
+  }
+}
+
 export function register(ipcMain: IpcMain, ctx: HandlerContext): void {
   const legacyConfigFile = getLegacyConfigFile(ctx.isDev)
 
@@ -78,30 +88,30 @@ export function register(ipcMain: IpcMain, ctx: HandlerContext): void {
   }
 
   // Profiles IPC handlers
-  ipcMain.handle('profiles:list', () => {
+  ipcMain.handle('profiles:list', async () => {
     if (ctx.isE2ETest) {
       return DEFAULT_PROFILES
     }
 
     try {
-      if (!existsSync(PROFILES_FILE)) {
+      if (!await fileExists(PROFILES_FILE)) {
         return DEFAULT_PROFILES
       }
-      const data = readFileSync(PROFILES_FILE, 'utf-8')
+      const data = await readFile(PROFILES_FILE, 'utf-8')
       return JSON.parse(data)
     } catch {
       return DEFAULT_PROFILES
     }
   })
 
-  ipcMain.handle('profiles:save', (_event, data: { profiles: { id: string; name: string; color: string }[]; lastProfileId: string }) => {
+  ipcMain.handle('profiles:save', async (_event, data: { profiles: { id: string; name: string; color: string }[]; lastProfileId: string }) => {
     if (ctx.isE2ETest) {
       return { success: true }
     }
 
     try {
-      mkdirSync(CONFIG_DIR, { recursive: true })
-      writeFileSync(PROFILES_FILE, JSON.stringify(data, null, 2))
+      await mkdir(CONFIG_DIR, { recursive: true })
+      await writeFile(PROFILES_FILE, JSON.stringify(data, null, 2))
       return { success: true }
     } catch (error) {
       return { success: false, error: String(error) }
@@ -148,7 +158,7 @@ export function register(ipcMain: IpcMain, ctx: HandlerContext): void {
   }
 
   // Config IPC handlers - now profile-aware
-  ipcMain.handle('config:load', (_event, profileId?: string) => {
+  ipcMain.handle('config:load', async (_event, profileId?: string) => {
     // In E2E test mode, return demo sessions for consistent testing
     if (ctx.isE2ETest) {
       return {
@@ -161,10 +171,10 @@ export function register(ipcMain: IpcMain, ctx: HandlerContext): void {
 
     const configFile = profileId ? getProfileConfigFile(profileId, ctx.isDev) : legacyConfigFile
     try {
-      if (!existsSync(configFile)) {
+      if (!await fileExists(configFile)) {
         return { agents: DEFAULT_AGENTS, sessions: [] }
       }
-      const data = readFileSync(configFile, 'utf-8')
+      const data = await readFile(configFile, 'utf-8')
       const config = JSON.parse(data)
       // Ensure agents array exists with defaults
       if (!config.agents || config.agents.length === 0) {
@@ -183,9 +193,9 @@ export function register(ipcMain: IpcMain, ctx: HandlerContext): void {
       // Primary config failed to parse — try backup
       const backupFile = `${configFile}.backup`
       try {
-        if (existsSync(backupFile)) {
+        if (await fileExists(backupFile)) {
           console.warn(`[config:load] Primary config corrupt, falling back to backup: ${backupFile}`)
-          const data = readFileSync(backupFile, 'utf-8')
+          const data = await readFile(backupFile, 'utf-8')
           const config = JSON.parse(data)
           if (!config.agents || config.agents.length === 0) {
             config.agents = DEFAULT_AGENTS
@@ -210,12 +220,12 @@ export function register(ipcMain: IpcMain, ctx: HandlerContext): void {
 
     try {
       await enqueueWrite(configFile, async () => {
-        if (!existsSync(configDir)) {
+        if (!await fileExists(configDir)) {
           await mkdir(configDir, { recursive: true })
         }
         // Read existing config to preserve unknown fields (future-proofing)
         let existingConfig: Record<string, unknown> = {}
-        if (existsSync(configFile)) {
+        if (await fileExists(configFile)) {
           try {
             existingConfig = JSON.parse(await readFile(configFile, 'utf-8'))
           } catch {
@@ -240,7 +250,7 @@ export function register(ipcMain: IpcMain, ctx: HandlerContext): void {
         // Atomic write: write to tmp, backup current, rename tmp → config
         await writeFile(tmpFile, JSON.stringify(configToSave, null, 2))
 
-        if (existsSync(configFile)) {
+        if (await fileExists(configFile)) {
           await copyFile(configFile, backupFile)
         }
 
@@ -253,7 +263,7 @@ export function register(ipcMain: IpcMain, ctx: HandlerContext): void {
   })
 
   // Init script handlers - profile-aware
-  ipcMain.handle('repos:getInitScript', (_event, repoId: string, profileId?: string) => {
+  ipcMain.handle('repos:getInitScript', async (_event, repoId: string, profileId?: string) => {
     if (ctx.isE2ETest) {
       return isWindows
         ? '@echo off\r\necho init script for E2E'
@@ -266,28 +276,28 @@ export function register(ipcMain: IpcMain, ctx: HandlerContext): void {
       const platformExt = isWindows ? '.bat' : '.sh'
       const fallbackExt = isWindows ? '.sh' : '.bat'
       let scriptPath = join(initScriptsDir, `${repoId}${platformExt}`)
-      if (!existsSync(scriptPath)) {
+      if (!await fileExists(scriptPath)) {
         scriptPath = join(initScriptsDir, `${repoId}${fallbackExt}`)
       }
-      if (!existsSync(scriptPath)) return null
-      return readFileSync(scriptPath, 'utf-8')
+      if (!await fileExists(scriptPath)) return null
+      return await readFile(scriptPath, 'utf-8')
     } catch {
       return null
     }
   })
 
-  ipcMain.handle('repos:saveInitScript', (_event, repoId: string, script: string, profileId?: string) => {
+  ipcMain.handle('repos:saveInitScript', async (_event, repoId: string, script: string, profileId?: string) => {
     if (ctx.isE2ETest) {
       return { success: true }
     }
 
     try {
       const initScriptsDir = profileId ? getProfileInitScriptsDir(profileId) : join(CONFIG_DIR, 'init-scripts')
-      if (!existsSync(initScriptsDir)) {
-        mkdirSync(initScriptsDir, { recursive: true })
+      if (!await fileExists(initScriptsDir)) {
+        await mkdir(initScriptsDir, { recursive: true })
       }
       const scriptPath = join(initScriptsDir, isWindows ? `${repoId}.bat` : `${repoId}.sh`)
-      writeFileSync(scriptPath, script, 'utf-8')
+      await writeFile(scriptPath, script, 'utf-8')
       makeExecutable(scriptPath)
       return { success: true }
     } catch (error) {

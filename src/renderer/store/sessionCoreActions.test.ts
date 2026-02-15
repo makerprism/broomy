@@ -128,7 +128,6 @@ describe('sessionCoreActions', () => {
       vi.mocked(window.git.isGitRepo).mockResolvedValue(true)
       await useSessionStore.getState().addSession('/test/repo1', null)
       await useSessionStore.getState().addSession('/test/repo2', null)
-      const sessions = useSessionStore.getState().sessions
       const activeId = useSessionStore.getState().activeSessionId
 
       useSessionStore.getState().removeSession(activeId!)
@@ -179,8 +178,6 @@ describe('sessionCoreActions', () => {
       vi.mocked(window.git.getBranch).mockResolvedValue('main')
       await useSessionStore.getState().addSession('/test/repo', null)
 
-      const setSpy = vi.fn()
-      const orig = useSessionStore.setState
       await useSessionStore.getState().refreshAllBranches()
       // Branch should remain 'main' — no redundant update
       expect(useSessionStore.getState().sessions[0].branch).toBe('main')

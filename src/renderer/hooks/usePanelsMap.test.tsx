@@ -1,17 +1,23 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderHook } from '@testing-library/react'
+import { render } from '@testing-library/react'
 import { usePanelsMap, type PanelsMapConfig } from './usePanelsMap'
 import { PANEL_IDS } from '../panels'
-import type { Session } from '../store/sessions'
+import { useSessionStore, type Session } from '../store/sessions'
 
-// Mock all component imports to avoid rendering real components
+// Mock all component imports — capture props for callback testing
+let lastExplorerProps: Record<string, unknown> = {}
+let lastFileViewerProps: Record<string, unknown> = {}
+let lastReviewPanelProps: Record<string, unknown> = {}
+let lastAgentSettingsProps: Record<string, unknown> = {}
+
 vi.mock('../components/Terminal', () => ({ default: () => null }))
 vi.mock('../components/TabbedTerminal', () => ({ default: () => null }))
-vi.mock('../components/explorer', () => ({ default: () => null }))
-vi.mock('../components/FileViewer', () => ({ default: () => null }))
-vi.mock('../components/review', () => ({ default: () => null }))
-vi.mock('../components/AgentSettings', () => ({ default: () => null }))
+vi.mock('../components/explorer', () => ({ default: (props: Record<string, unknown>) => { lastExplorerProps = props; return null } }))
+vi.mock('../components/FileViewer', () => ({ default: (props: Record<string, unknown>) => { lastFileViewerProps = props; return null } }))
+vi.mock('../components/review', () => ({ default: (props: Record<string, unknown>) => { lastReviewPanelProps = props; return null } }))
+vi.mock('../components/AgentSettings', () => ({ default: (props: Record<string, unknown>) => { lastAgentSettingsProps = props; return null } }))
 vi.mock('../components/SessionList', () => ({ default: () => null }))
 vi.mock('../components/WelcomeScreen', () => ({ default: () => null }))
 vi.mock('../components/TutorialPanel', () => ({ default: () => null }))
@@ -53,7 +59,7 @@ function makeSession(overrides: Partial<Session> = {}): Session {
     workingStartTime: null,
     recentFiles: [],
     terminalTabs: { tabs: [{ id: 'tab-1', name: 'Terminal' }], activeTabId: 'tab-1' },
-    branchStatus: { status: 'unknown' },
+    branchStatus: 'in-progress' as const,
     isArchived: false,
     ...overrides,
   }
@@ -229,17 +235,15 @@ describe('usePanelsMap', () => {
     expect(result.current[PANEL_IDS.REVIEW]).not.toBeNull()
   })
 
-  it('passes markStepComplete to agentTerminal onUserInput', () => {
-    const markStepComplete = vi.fn()
-    const config = makeConfig({ markStepComplete })
+  it('passes config to agentTerminal onUserInput', () => {
+    const config = makeConfig()
     const { result } = renderHook(() => usePanelsMap(config))
 
     expect(result.current[PANEL_IDS.AGENT_TERMINAL]).not.toBeNull()
   })
 
-  it('passes markStepComplete to userTerminal onUserInput', () => {
-    const markStepComplete = vi.fn()
-    const config = makeConfig({ markStepComplete })
+  it('passes config to userTerminal onUserInput', () => {
+    const config = makeConfig()
     const { result } = renderHook(() => usePanelsMap(config))
 
     expect(result.current[PANEL_IDS.USER_TERMINAL]).not.toBeNull()
@@ -273,5 +277,115 @@ describe('usePanelsMap', () => {
 
     expect(result.current[PANEL_IDS.AGENT_TERMINAL]).not.toBeNull()
     expect(result.current[PANEL_IDS.USER_TERMINAL]).not.toBeNull()
+  })
+
+  describe('explorer callbacks', () => {
+    function renderExplorer(configOverrides: Partial<PanelsMapConfig> = {}) {
+      const session = makeSession({ showExplorer: true })
+      const config = makeConfig({ sessions: [session], activeSession: session, ...configOverrides })
+      const { result } = renderHook(() => usePanelsMap(config))
+      // Render the explorer element to trigger mock and capture props
+      const explorerElement = result.current[PANEL_IDS.EXPLORER]
+      if (explorerElement) render(explorerElement as React.ReactElement)
+      return { config, lastExplorerProps }
+    }
+
+    it('onFilterChange calls setExplorerFilter with active session id', () => {
+      const setExplorerFilter = vi.fn()
+      const { lastExplorerProps: props } = renderExplorer({ setExplorerFilter })
+      const onFilterChange = props.onFilterChange as (filter: string) => void
+      onFilterChange('source-control')
+      expect(setExplorerFilter).toHaveBeenCalledWith('session-1', 'source-control')
+    })
+
+    it('onRecordPushToMain calls recordPushToMain with active session id', () => {
+      const recordPushToMain = vi.fn()
+      const { lastExplorerProps: props } = renderExplorer({ recordPushToMain })
+      const onRecordPushToMain = props.onRecordPushToMain as (hash: string) => void
+      onRecordPushToMain('abc123')
+      expect(recordPushToMain).toHaveBeenCalledWith('session-1', 'abc123')
+    })
+
+    it('onClearPushToMain calls clearPushToMain with active session id', () => {
+      const clearPushToMain = vi.fn()
+      const { lastExplorerProps: props } = renderExplorer({ clearPushToMain })
+      const onClearPushToMain = props.onClearPushToMain as () => void
+      onClearPushToMain()
+      expect(clearPushToMain).toHaveBeenCalledWith('session-1')
+    })
+
+    it('onUpdatePrState calls updatePrState with active session id', () => {
+      const updatePrState = vi.fn()
+      const { lastExplorerProps: props } = renderExplorer({ updatePrState })
+      const onUpdatePrState = props.onUpdatePrState as (state: string, num?: number, url?: string) => void
+      onUpdatePrState('open', 42, 'https://github.com/org/repo/pull/42')
+      expect(updatePrState).toHaveBeenCalledWith('session-1', 'open', 42, 'https://github.com/org/repo/pull/42')
+    })
+
+    it('onOpenReview opens review panel and adds to toolbar', () => {
+      const setPanelVisibility = vi.fn()
+      const setToolbarPanels = vi.fn()
+      // Set up store state with toolbarPanels that include explorer but not review
+      useSessionStore.setState({ toolbarPanels: [PANEL_IDS.EXPLORER] })
+      const { lastExplorerProps: props } = renderExplorer({ setPanelVisibility, setToolbarPanels })
+      const onOpenReview = props.onOpenReview as () => void
+      onOpenReview()
+      expect(setPanelVisibility).toHaveBeenCalledWith('session-1', PANEL_IDS.REVIEW, true)
+      expect(setToolbarPanels).toHaveBeenCalledWith([PANEL_IDS.EXPLORER, PANEL_IDS.REVIEW])
+    })
+
+    it('onOpenReview does not add review to toolbar if already present', () => {
+      const setPanelVisibility = vi.fn()
+      const setToolbarPanels = vi.fn()
+      useSessionStore.setState({ toolbarPanels: [PANEL_IDS.EXPLORER, PANEL_IDS.REVIEW] })
+      const { lastExplorerProps: props } = renderExplorer({ setPanelVisibility, setToolbarPanels })
+      const onOpenReview = props.onOpenReview as () => void
+      onOpenReview()
+      expect(setPanelVisibility).toHaveBeenCalledWith('session-1', PANEL_IDS.REVIEW, true)
+      expect(setToolbarPanels).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('fileViewer callbacks', () => {
+    it('onOpenFile calls navigateToFile with correct args', () => {
+      const navigateToFile = vi.fn()
+      const session = makeSession({ showFileViewer: true })
+      const config = makeConfig({ sessions: [session], activeSession: session, navigateToFile })
+      const { result } = renderHook(() => usePanelsMap(config))
+      const fvElement = result.current[PANEL_IDS.FILE_VIEWER]
+      if (fvElement) render(fvElement as React.ReactElement)
+      const onOpenFile = lastFileViewerProps.onOpenFile as (path: string, line?: number) => void
+      onOpenFile('/test/other.ts', 42)
+      expect(navigateToFile).toHaveBeenCalledWith({ filePath: '/test/other.ts', openInDiffMode: false, scrollToLine: 42 })
+    })
+  })
+
+  describe('review panel callbacks', () => {
+    it('onSelectFile calls navigateToFile', () => {
+      const navigateToFile = vi.fn()
+      const config = makeConfig({ navigateToFile })
+      const { result } = renderHook(() => usePanelsMap(config))
+      const reviewElement = result.current[PANEL_IDS.REVIEW]
+      if (reviewElement) render(reviewElement as React.ReactElement)
+      const onSelectFile = lastReviewPanelProps.onSelectFile as (path: string, diff: boolean, line?: number, base?: string) => void
+      onSelectFile('/file.ts', true, 10, 'abc123')
+      expect(navigateToFile).toHaveBeenCalledWith({ filePath: '/file.ts', openInDiffMode: true, scrollToLine: 10, diffBaseRef: 'abc123' })
+    })
+  })
+
+  describe('settings panel callbacks', () => {
+    it('onClose calls toggleGlobalPanel', () => {
+      const toggleGlobalPanel = vi.fn()
+      const config = makeConfig({
+        globalPanelVisibility: { [PANEL_IDS.SIDEBAR]: true, [PANEL_IDS.SETTINGS]: true },
+        toggleGlobalPanel,
+      })
+      const { result } = renderHook(() => usePanelsMap(config))
+      const settingsElement = result.current[PANEL_IDS.SETTINGS]
+      if (settingsElement) render(settingsElement as React.ReactElement)
+      const onClose = lastAgentSettingsProps.onClose as () => void
+      onClose()
+      expect(toggleGlobalPanel).toHaveBeenCalledWith(PANEL_IDS.SETTINGS)
+    })
   })
 })

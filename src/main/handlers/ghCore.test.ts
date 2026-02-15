@@ -1,8 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 vi.mock('child_process', () => ({
-  execSync: vi.fn(),
+  execFile: vi.fn(),
+  exec: vi.fn(),
 }))
+
+vi.mock('util', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('util')>()
+  return {
+    ...actual,
+    promisify: (fn: Function) => fn,
+  }
+})
 
 const mockGitInstance = {
   status: vi.fn(),
@@ -23,6 +32,7 @@ vi.mock('../gitStatusParser', () => ({
 vi.mock('../platform', () => ({
   isWindows: false,
   normalizePath: (p: string) => p.replace(/\\/g, '/'),
+  getExecShell: vi.fn(() => undefined),
 }))
 
 vi.mock('./types', async (importOriginal) => {
@@ -33,7 +43,7 @@ vi.mock('./types', async (importOriginal) => {
   }
 })
 
-import { execSync } from 'child_process'
+import { execFile, exec } from 'child_process'
 import { register } from './ghCore'
 import type { HandlerContext } from './types'
 
@@ -87,168 +97,171 @@ describe('ghCore handlers', () => {
   })
 
   describe('agent:isInstalled', () => {
-    it('returns true in E2E mode', () => {
+    it('returns true in E2E mode', async () => {
       const handlers = setupHandlers(createMockCtx({ isE2ETest: true }))
-      expect(handlers['agent:isInstalled'](null, 'claude')).toBe(true)
+      expect(await handlers['agent:isInstalled'](null, 'claude')).toBe(true)
     })
 
-    it('returns true when command exists', () => {
-      vi.mocked(execSync).mockReturnValue('' as never)
+    it('returns true when command exists', async () => {
+      // Non-Windows path uses runShellCommand which uses exec
+      vi.mocked(exec).mockResolvedValue({ stdout: '/usr/bin/claude', stderr: '' } as never)
       const handlers = setupHandlers()
-      expect(handlers['agent:isInstalled'](null, 'claude')).toBe(true)
+      expect(await handlers['agent:isInstalled'](null, 'claude')).toBe(true)
     })
 
-    it('returns false when command not found', () => {
-      vi.mocked(execSync).mockImplementation(() => { throw new Error('not found') })
+    it('returns false when command not found', async () => {
+      vi.mocked(exec).mockRejectedValue(new Error('not found'))
       const handlers = setupHandlers()
-      expect(handlers['agent:isInstalled'](null, 'missing-cmd')).toBe(false)
+      expect(await handlers['agent:isInstalled'](null, 'missing-cmd')).toBe(false)
     })
   })
 
   describe('git:isInstalled', () => {
-    it('returns true in E2E mode', () => {
+    it('returns true in E2E mode', async () => {
       const handlers = setupHandlers(createMockCtx({ isE2ETest: true }))
-      expect(handlers['git:isInstalled']()).toBe(true)
+      expect(await handlers['git:isInstalled']()).toBe(true)
     })
 
-    it('returns true when git is available', () => {
-      vi.mocked(execSync).mockReturnValue('' as never)
+    it('returns true when git is available', async () => {
+      vi.mocked(execFile).mockResolvedValue({ stdout: 'git version 2.x', stderr: '' } as never)
       const handlers = setupHandlers()
-      expect(handlers['git:isInstalled']()).toBe(true)
+      expect(await handlers['git:isInstalled']()).toBe(true)
     })
 
-    it('returns false when git is not available', () => {
-      vi.mocked(execSync).mockImplementation(() => { throw new Error('not found') })
+    it('returns false when git is not available', async () => {
+      vi.mocked(execFile).mockRejectedValue(new Error('not found'))
       const handlers = setupHandlers()
-      expect(handlers['git:isInstalled']()).toBe(false)
+      expect(await handlers['git:isInstalled']()).toBe(false)
     })
   })
 
   describe('gh:isInstalled', () => {
-    it('returns true in E2E mode', () => {
+    it('returns true in E2E mode', async () => {
       const handlers = setupHandlers(createMockCtx({ isE2ETest: true }))
-      expect(handlers['gh:isInstalled']()).toBe(true)
+      expect(await handlers['gh:isInstalled']()).toBe(true)
     })
 
-    it('returns false when gh is not installed', () => {
-      vi.mocked(execSync).mockImplementation(() => { throw new Error('not found') })
+    it('returns false when gh is not installed', async () => {
+      vi.mocked(execFile).mockRejectedValue(new Error('not found'))
       const handlers = setupHandlers()
-      expect(handlers['gh:isInstalled']()).toBe(false)
+      expect(await handlers['gh:isInstalled']()).toBe(false)
     })
   })
 
   describe('gh:issues', () => {
-    it('returns mock issues in E2E mode', () => {
+    it('returns mock issues in E2E mode', async () => {
       const handlers = setupHandlers(createMockCtx({ isE2ETest: true }))
-      const result = handlers['gh:issues'](null, '/repo')
+      const result = await handlers['gh:issues'](null, '/repo')
       expect(result).toHaveLength(2)
       expect(result[0].number).toBe(42)
     })
 
-    it('parses issue list in normal mode', () => {
+    it('parses issue list in normal mode', async () => {
       const mockIssues = [
         { number: 1, title: 'Bug', labels: [{ name: 'bug' }], url: 'https://github.com/repo/issues/1' },
       ]
-      vi.mocked(execSync).mockReturnValue(JSON.stringify(mockIssues))
+      vi.mocked(execFile).mockResolvedValue({ stdout: JSON.stringify(mockIssues), stderr: '' } as never)
 
       const handlers = setupHandlers()
-      const result = handlers['gh:issues'](null, '/repo')
+      const result = await handlers['gh:issues'](null, '/repo')
       expect(result).toHaveLength(1)
       expect(result[0].labels).toEqual(['bug'])
     })
 
-    it('returns empty array on error', () => {
-      vi.mocked(execSync).mockImplementation(() => { throw new Error('fail') })
+    it('returns empty array on error', async () => {
+      vi.mocked(execFile).mockRejectedValue(new Error('fail'))
       const handlers = setupHandlers()
-      expect(handlers['gh:issues'](null, '/repo')).toEqual([])
+      expect(await handlers['gh:issues'](null, '/repo')).toEqual([])
     })
   })
 
   describe('gh:repoSlug', () => {
-    it('returns mock slug in E2E mode', () => {
+    it('returns mock slug in E2E mode', async () => {
       const handlers = setupHandlers(createMockCtx({ isE2ETest: true }))
-      expect(handlers['gh:repoSlug'](null, '/repo')).toBe('user/demo-project')
+      expect(await handlers['gh:repoSlug'](null, '/repo')).toBe('user/demo-project')
     })
 
-    it('returns slug from gh repo view', () => {
-      vi.mocked(execSync).mockReturnValue('org/repo\n')
+    it('returns slug from gh repo view', async () => {
+      vi.mocked(execFile).mockResolvedValue({ stdout: 'org/repo\n', stderr: '' } as never)
       const handlers = setupHandlers()
-      expect(handlers['gh:repoSlug'](null, '/repo')).toBe('org/repo')
+      expect(await handlers['gh:repoSlug'](null, '/repo')).toBe('org/repo')
     })
 
-    it('returns null on error', () => {
-      vi.mocked(execSync).mockImplementation(() => { throw new Error('fail') })
+    it('returns null on error', async () => {
+      vi.mocked(execFile).mockRejectedValue(new Error('fail'))
       const handlers = setupHandlers()
-      expect(handlers['gh:repoSlug'](null, '/repo')).toBeNull()
+      expect(await handlers['gh:repoSlug'](null, '/repo')).toBeNull()
     })
 
-    it('returns null for empty result', () => {
-      vi.mocked(execSync).mockReturnValue('  \n')
+    it('returns null for empty result', async () => {
+      vi.mocked(execFile).mockResolvedValue({ stdout: '  \n', stderr: '' } as never)
       const handlers = setupHandlers()
-      expect(handlers['gh:repoSlug'](null, '/repo')).toBe(null)
+      expect(await handlers['gh:repoSlug'](null, '/repo')).toBe(null)
     })
   })
 
   describe('gh:prStatus', () => {
-    it('returns mock PR for non-main branch in E2E mode', () => {
+    it('returns mock PR for non-main branch in E2E mode', async () => {
       const handlers = setupHandlers(createMockCtx({ isE2ETest: true }))
-      // The E2E mock branches map has specific entries for some dirs
-      const result = handlers['gh:prStatus'](null, '/some/dir')
       // For unmatched dirs, branch falls back to undefined which is falsy, so returns null
+      const result = await handlers['gh:prStatus'](null, '/some/dir')
       expect(result).toBeNull()
     })
 
-    it('returns PR data from gh pr view in normal mode', () => {
-      vi.mocked(execSync).mockReturnValue(JSON.stringify({
-        number: 99,
-        title: 'My PR',
-        state: 'OPEN',
-        url: 'https://github.com/org/repo/pull/99',
-        headRefName: 'feature',
-        baseRefName: 'main',
-      }))
+    it('returns PR data from gh pr view in normal mode', async () => {
+      vi.mocked(execFile).mockResolvedValue({
+        stdout: JSON.stringify({
+          number: 99,
+          title: 'My PR',
+          state: 'OPEN',
+          url: 'https://github.com/org/repo/pull/99',
+          headRefName: 'feature',
+          baseRefName: 'main',
+        }),
+        stderr: '',
+      } as never)
 
       const handlers = setupHandlers()
-      const result = handlers['gh:prStatus'](null, '/repo')
+      const result = await handlers['gh:prStatus'](null, '/repo')
       expect(result.number).toBe(99)
       expect(result.state).toBe('OPEN')
     })
 
-    it('returns null on error', () => {
-      vi.mocked(execSync).mockImplementation(() => { throw new Error('no PR') })
+    it('returns null on error', async () => {
+      vi.mocked(execFile).mockRejectedValue(new Error('no PR'))
       const handlers = setupHandlers()
-      expect(handlers['gh:prStatus'](null, '/repo')).toBeNull()
+      expect(await handlers['gh:prStatus'](null, '/repo')).toBeNull()
     })
   })
 
   describe('gh:hasWriteAccess', () => {
-    it('returns true in E2E mode', () => {
+    it('returns true in E2E mode', async () => {
       const handlers = setupHandlers(createMockCtx({ isE2ETest: true }))
-      expect(handlers['gh:hasWriteAccess'](null, '/repo')).toBe(true)
+      expect(await handlers['gh:hasWriteAccess'](null, '/repo')).toBe(true)
     })
 
-    it('returns true for WRITE permission', () => {
-      vi.mocked(execSync).mockReturnValue('WRITE\n')
+    it('returns true for WRITE permission', async () => {
+      vi.mocked(execFile).mockResolvedValue({ stdout: 'WRITE\n', stderr: '' } as never)
       const handlers = setupHandlers()
-      expect(handlers['gh:hasWriteAccess'](null, '/repo')).toBe(true)
+      expect(await handlers['gh:hasWriteAccess'](null, '/repo')).toBe(true)
     })
 
-    it('returns true for ADMIN permission', () => {
-      vi.mocked(execSync).mockReturnValue('ADMIN\n')
+    it('returns true for ADMIN permission', async () => {
+      vi.mocked(execFile).mockResolvedValue({ stdout: 'ADMIN\n', stderr: '' } as never)
       const handlers = setupHandlers()
-      expect(handlers['gh:hasWriteAccess'](null, '/repo')).toBe(true)
+      expect(await handlers['gh:hasWriteAccess'](null, '/repo')).toBe(true)
     })
 
-    it('returns false for READ permission', () => {
-      vi.mocked(execSync).mockReturnValue('READ\n')
+    it('returns false for READ permission', async () => {
+      vi.mocked(execFile).mockResolvedValue({ stdout: 'READ\n', stderr: '' } as never)
       const handlers = setupHandlers()
-      expect(handlers['gh:hasWriteAccess'](null, '/repo')).toBe(false)
+      expect(await handlers['gh:hasWriteAccess'](null, '/repo')).toBe(false)
     })
 
-    it('returns false on error', () => {
-      vi.mocked(execSync).mockImplementation(() => { throw new Error('fail') })
+    it('returns false on error', async () => {
+      vi.mocked(execFile).mockRejectedValue(new Error('fail'))
       const handlers = setupHandlers()
-      expect(handlers['gh:hasWriteAccess'](null, '/repo')).toBe(false)
+      expect(await handlers['gh:hasWriteAccess'](null, '/repo')).toBe(false)
     })
   })
 
@@ -312,7 +325,7 @@ describe('ghCore handlers', () => {
     it('builds PR create URL in normal mode', async () => {
       mockGitInstance.status.mockResolvedValue({ current: 'feature/auth' })
       mockGitInstance.raw.mockResolvedValue('refs/remotes/origin/main\n')
-      vi.mocked(execSync).mockReturnValue('org/repo\n')
+      vi.mocked(execFile).mockResolvedValue({ stdout: 'org/repo\n', stderr: '' } as never)
 
       const handlers = setupHandlers()
       const result = await handlers['gh:getPrCreateUrl'](null, '/repo')
@@ -331,7 +344,7 @@ describe('ghCore handlers', () => {
 
     it('returns null when repo slug is empty', async () => {
       mockGitInstance.status.mockResolvedValue({ current: 'feature' })
-      vi.mocked(execSync).mockReturnValue('  \n')
+      vi.mocked(execFile).mockResolvedValue({ stdout: '  \n', stderr: '' } as never)
 
       const handlers = setupHandlers()
       const result = await handlers['gh:getPrCreateUrl'](null, '/repo')

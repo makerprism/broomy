@@ -26,7 +26,7 @@ describe('SCViewToggle', () => {
   })
 
   it('shows Comments button when PR is present', () => {
-    const prStatus = { number: 1, title: 'Test', state: 'OPEN', url: 'https://example.com' }
+    const prStatus = { number: 1, title: 'Test', state: 'OPEN' as const, url: 'https://example.com', headRefName: 'feature/test', baseRefName: 'main' }
     render(<SCViewToggle scView="working" setScView={vi.fn()} prStatus={prStatus} />)
     expect(screen.getByText('Comments')).toBeTruthy()
   })
@@ -62,7 +62,7 @@ describe('SCViewToggle', () => {
 
   it('calls setScView with comments when Comments is clicked', () => {
     const setScView = vi.fn()
-    const prStatus = { number: 1, title: 'Test', state: 'OPEN', url: 'https://example.com' }
+    const prStatus = { number: 1, title: 'Test', state: 'OPEN' as const, url: 'https://example.com', headRefName: 'feature/test', baseRefName: 'main' }
     render(<SCViewToggle scView="working" setScView={setScView} prStatus={prStatus} />)
     fireEvent.click(screen.getByText('Comments'))
     expect(setScView).toHaveBeenCalledWith('comments')

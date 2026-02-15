@@ -71,4 +71,39 @@ describe('ErrorIndicator', () => {
     expect(useErrorStore.getState().errors).toHaveLength(2)
     expect(useErrorStore.getState().errors.find(e => e.id === errorId)!.dismissed).toBe(true)
   })
+
+  it('shows detail when clicking error message', () => {
+    useErrorStore.getState().addError('ENOENT: no such file')
+    render(<ErrorIndicator />)
+    fireEvent.click(screen.getByTitle('1 error'))
+    fireEvent.click(screen.getByText('File or directory not found.'))
+    expect(useErrorStore.getState().detailError).not.toBeNull()
+  })
+
+  it('closes dropdown via backdrop click', () => {
+    useErrorStore.getState().addError('Test error')
+    render(<ErrorIndicator />)
+    fireEvent.click(screen.getByTitle('1 error'))
+    expect(screen.getByText('Errors (1)')).toBeTruthy()
+
+    // Click the backdrop (fixed inset-0 div)
+    const backdrop = document.querySelector('.fixed.inset-0.z-40')
+    expect(backdrop).toBeTruthy()
+    fireEvent.click(backdrop!)
+
+    expect(screen.queryByText('Errors (1)')).toBeNull()
+  })
+
+  it('dismisses individual error from dropdown', () => {
+    useErrorStore.getState().addError('Error to dismiss via button')
+    render(<ErrorIndicator />)
+    fireEvent.click(screen.getByTitle('1 error'))
+
+    // Find the dismiss button (the X button with svg inside)
+    const dismissButtons = document.querySelectorAll('.group-hover\\:opacity-100')
+    expect(dismissButtons.length).toBe(1)
+    fireEvent.click(dismissButtons[0])
+
+    expect(useErrorStore.getState().errors[0].dismissed).toBe(true)
+  })
 })

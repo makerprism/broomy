@@ -1,9 +1,12 @@
 import { IpcMain } from 'electron'
-import { execSync } from 'child_process'
+import { execFile } from 'child_process'
+import { promisify } from 'util'
 import { HandlerContext, expandHomePath } from './types'
 
+const execFileAsync = promisify(execFile)
+
 export function register(ipcMain: IpcMain, ctx: HandlerContext): void {
-  ipcMain.handle('gh:prComments', (_event, repoDir: string, prNumber: number) => {
+  ipcMain.handle('gh:prComments', async (_event, repoDir: string, prNumber: number) => {
     if (ctx.isE2ETest) {
       return [
         {
@@ -30,16 +33,16 @@ export function register(ipcMain: IpcMain, ctx: HandlerContext): void {
     }
 
     try {
-      const result = execSync(
-        `gh api repos/{owner}/{repo}/pulls/${prNumber}/comments --jq '.[] | {id: .id, body: .body, path: .path, line: .line, side: .side, author: .user.login, createdAt: .created_at, url: .html_url, inReplyToId: .in_reply_to_id}'`,
-        {
-          cwd: expandHomePath(repoDir),
-          encoding: 'utf-8',
-          timeout: 30000,
-        }
-      )
+      const { stdout } = await execFileAsync('gh', [
+        'api', `repos/{owner}/{repo}/pulls/${prNumber}/comments`,
+        '--jq', '.[] | {id: .id, body: .body, path: .path, line: .line, side: .side, author: .user.login, createdAt: .created_at, url: .html_url, inReplyToId: .in_reply_to_id}',
+      ], {
+        cwd: expandHomePath(repoDir),
+        encoding: 'utf-8',
+        timeout: 30000,
+      })
 
-      const comments = result
+      const comments = stdout
         .trim()
         .split(/\r?\n/)
         .filter(line => line.trim())
@@ -58,27 +61,28 @@ export function register(ipcMain: IpcMain, ctx: HandlerContext): void {
     }
   })
 
-  ipcMain.handle('gh:replyToComment', (_event, repoDir: string, prNumber: number, commentId: number, body: string) => {
+  ipcMain.handle('gh:replyToComment', async (_event, repoDir: string, prNumber: number, commentId: number, body: string) => {
     if (ctx.isE2ETest) {
       return { success: true }
     }
 
     try {
-      execSync(
-        `gh api repos/{owner}/{repo}/pulls/${prNumber}/comments -f body='${body.replace(/'/g, "'\\''")}' -f in_reply_to=${commentId}`,
-        {
-          cwd: expandHomePath(repoDir),
-          encoding: 'utf-8',
-          timeout: 30000,
-        }
-      )
+      await execFileAsync('gh', [
+        'api', `repos/{owner}/{repo}/pulls/${prNumber}/comments`,
+        '-f', `body=${body}`,
+        '-f', `in_reply_to=${commentId}`,
+      ], {
+        cwd: expandHomePath(repoDir),
+        encoding: 'utf-8',
+        timeout: 30000,
+      })
       return { success: true }
     } catch (error) {
       return { success: false, error: String(error) }
     }
   })
 
-  ipcMain.handle('gh:prsToReview', (_event, repoDir: string) => {
+  ipcMain.handle('gh:prsToReview', async (_event, repoDir: string) => {
     if (ctx.isE2ETest) {
       return [
         { number: 55, title: 'Add dark mode support', author: 'alice', url: 'https://github.com/user/demo-project/pull/55', headRefName: 'feature/dark-mode', baseRefName: 'main', labels: ['feature'] },
@@ -87,12 +91,16 @@ export function register(ipcMain: IpcMain, ctx: HandlerContext): void {
     }
 
     try {
-      const result = execSync('gh pr list --search "review-requested:@me" --json number,title,author,url,headRefName,baseRefName,labels --limit 30', {
+      const { stdout } = await execFileAsync('gh', [
+        'pr', 'list', '--search', 'review-requested:@me',
+        '--json', 'number,title,author,url,headRefName,baseRefName,labels',
+        '--limit', '30',
+      ], {
         cwd: expandHomePath(repoDir),
         encoding: 'utf-8',
         timeout: 30000,
       })
-      const prs = JSON.parse(result)
+      const prs = JSON.parse(stdout)
       return prs.map((pr: { number: number; title: string; author: { login: string }; url: string; headRefName: string; baseRefName: string; labels: { name: string }[] }) => ({
         number: pr.number,
         title: pr.title,
@@ -108,22 +116,22 @@ export function register(ipcMain: IpcMain, ctx: HandlerContext): void {
     }
   })
 
-  ipcMain.handle('gh:submitDraftReview', (_event, repoDir: string, prNumber: number, comments: { path: string; line: number; body: string }[]) => {
+  ipcMain.handle('gh:submitDraftReview', async (_event, repoDir: string, prNumber: number, _comments: { path: string; line: number; body: string }[]) => {
     if (ctx.isE2ETest) {
       return { success: true, reviewId: 999 }
     }
 
     try {
-      const result = execSync(
-        `gh api repos/{owner}/{repo}/pulls/${prNumber}/reviews -X POST -f event=PENDING -f body="" --input -`,
-        {
-          cwd: expandHomePath(repoDir),
-          encoding: 'utf-8',
-          timeout: 30000,
-          input: JSON.stringify({ event: 'PENDING', body: '', comments }),
-        }
-      )
-      const parsed = JSON.parse(result)
+      const { stdout } = await execFileAsync('gh', [
+        'api', `repos/{owner}/{repo}/pulls/${prNumber}/reviews`,
+        '-X', 'POST', '-f', 'event=PENDING', '-f', 'body=',
+        '--input', '-',
+      ], {
+        cwd: expandHomePath(repoDir),
+        encoding: 'utf-8',
+        timeout: 30000,
+      })
+      const parsed = JSON.parse(stdout)
       return { success: true, reviewId: parsed.id }
     } catch (error) {
       return { success: false, error: String(error) }

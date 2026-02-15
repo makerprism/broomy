@@ -12,7 +12,7 @@ describe('usePlanDetection', () => {
     vi.clearAllMocks()
     mockSetPlanFile = vi.fn()
     sessionIdRef = { current: 'test-session' }
-    setPlanFileRef = { current: mockSetPlanFile }
+    setPlanFileRef = { current: mockSetPlanFile as (sessionId: string, planFile: string) => void }
   })
 
   it('returns a processPlanDetection function', () => {

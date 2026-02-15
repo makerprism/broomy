@@ -15,7 +15,7 @@ beforeEach(() => {
 const defaultProps = {
   directory: '/repos/project',
   gitStatus: [],
-  syncStatus: { current: 'feature/test', tracking: 'origin/feature/test', ahead: 0, behind: 0 },
+  syncStatus: { current: 'feature/test', tracking: 'origin/feature/test', ahead: 0, behind: 0, files: [] },
   branchStatus: 'in-progress' as const,
   branchBaseName: 'main',
   stagedFiles: [],
@@ -52,19 +52,19 @@ describe('SCWorkingView', () => {
     })
 
     it('shows commits to push when ahead', () => {
-      const syncStatus = { current: 'feature/test', tracking: 'origin/feature/test', ahead: 3, behind: 0 }
+      const syncStatus = { current: 'feature/test', tracking: 'origin/feature/test', ahead: 3, behind: 0, files: [] }
       render(<SCWorkingView {...defaultProps} syncStatus={syncStatus} />)
       expect(screen.getByText(/3 commits to push/)).toBeTruthy()
     })
 
     it('shows commits to pull when behind', () => {
-      const syncStatus = { current: 'feature/test', tracking: 'origin/feature/test', ahead: 0, behind: 2 }
+      const syncStatus = { current: 'feature/test', tracking: 'origin/feature/test', ahead: 0, behind: 2, files: [] }
       render(<SCWorkingView {...defaultProps} syncStatus={syncStatus} />)
       expect(screen.getByText(/2 commits to pull/)).toBeTruthy()
     })
 
     it('shows singular commit text', () => {
-      const syncStatus = { current: 'feature/test', tracking: 'origin/feature/test', ahead: 1, behind: 0 }
+      const syncStatus = { current: 'feature/test', tracking: 'origin/feature/test', ahead: 1, behind: 0, files: [] }
       render(<SCWorkingView {...defaultProps} syncStatus={syncStatus} />)
       expect(screen.getByText(/1 commit to push/)).toBeTruthy()
     })
@@ -80,14 +80,14 @@ describe('SCWorkingView', () => {
     })
 
     it('shows Push Branch to Remote when no tracking', () => {
-      const syncStatus = { current: 'feature/test', tracking: null, ahead: 0, behind: 0 }
+      const syncStatus = { current: 'feature/test', tracking: null, ahead: 0, behind: 0, files: [] }
       render(<SCWorkingView {...defaultProps} syncStatus={syncStatus} />)
       expect(screen.getByText('Push Branch to Remote')).toBeTruthy()
     })
 
     it('calls onPushNewBranch when push button is clicked', () => {
       const onPushNewBranch = vi.fn()
-      const syncStatus = { current: 'feature/test', tracking: null, ahead: 0, behind: 0 }
+      const syncStatus = { current: 'feature/test', tracking: null, ahead: 0, behind: 0, files: [] }
       render(<SCWorkingView {...defaultProps} syncStatus={syncStatus} onPushNewBranch={onPushNewBranch} />)
       fireEvent.click(screen.getByText('Push Branch to Remote'))
       expect(onPushNewBranch).toHaveBeenCalledWith('feature/test')
@@ -138,11 +138,11 @@ describe('SCWorkingView', () => {
     const changesProps = {
       ...defaultProps,
       gitStatus: [
-        { path: 'src/index.ts', status: 'modified', staged: false },
-        { path: 'src/app.ts', status: 'added', staged: true },
+        { path: 'src/index.ts', status: 'modified' as const, staged: false, indexStatus: ' ', workingDirStatus: 'M' },
+        { path: 'src/app.ts', status: 'added' as const, staged: true, indexStatus: 'A', workingDirStatus: ' ' },
       ],
-      stagedFiles: [{ path: 'src/app.ts', status: 'added', staged: true }],
-      unstagedFiles: [{ path: 'src/index.ts', status: 'modified', staged: false }],
+      stagedFiles: [{ path: 'src/app.ts', status: 'added' as const, staged: true, indexStatus: 'A', workingDirStatus: ' ' }],
+      unstagedFiles: [{ path: 'src/index.ts', status: 'modified' as const, staged: false, indexStatus: ' ', workingDirStatus: 'M' }],
     }
 
     it('shows commit input and button', () => {

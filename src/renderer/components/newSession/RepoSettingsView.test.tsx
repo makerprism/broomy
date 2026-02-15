@@ -160,7 +160,7 @@ describe('RepoSettingsView', () => {
     const textareas = document.querySelectorAll('textarea')
     // First textarea is init script
     fireEvent.change(textareas[0], { target: { value: 'npm install' } })
-    expect((textareas[0] as HTMLTextAreaElement).value).toBe('npm install')
+    expect((textareas[0]).value).toBe('npm install')
   })
 
   it('allows typing in review instructions textarea', async () => {
@@ -171,7 +171,7 @@ describe('RepoSettingsView', () => {
     const textareas = document.querySelectorAll('textarea')
     // Second textarea is review instructions
     fireEvent.change(textareas[1], { target: { value: 'Check for bugs' } })
-    expect((textareas[1] as HTMLTextAreaElement).value).toBe('Check for bugs')
+    expect((textareas[1]).value).toBe('Check for bugs')
   })
 
   it('shows init script textarea', async () => {

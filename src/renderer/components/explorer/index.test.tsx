@@ -101,7 +101,7 @@ describe('Explorer', () => {
   })
 
   it('highlights active filter tab', () => {
-    const { container } = render(
+    render(
       <Explorer {...defaultProps} directory="/repos/project" filter="source-control" />
     )
     const scButton = screen.getByTitle('Source Control')

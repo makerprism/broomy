@@ -15,7 +15,7 @@ vi.mock('./Terminal', () => ({
 // Mock TerminalTabBar with simplified rendering
 vi.mock('./TerminalTabBar', () => ({
   default: (props: {
-    tabs: Array<{ id: string; name: string }>
+    tabs: { id: string; name: string }[]
     activeTabId: string | null
     handleTabClick: (tabId: string) => void
     handleCloseTab: (e: React.MouseEvent, tabId: string) => void
@@ -92,7 +92,7 @@ beforeEach(() => {
           ],
           activeTabId: tab1Id,
         },
-        branchStatus: { type: 'unknown' },
+        branchStatus: 'in-progress',
         isArchived: false,
       },
     ],

@@ -109,7 +109,7 @@ describe('EnvVarEditor', () => {
   it('clicking a suggestion populates the new key field', () => {
     render(<EnvVarEditor env={{}} onChange={vi.fn()} command="claude" />)
     fireEvent.click(screen.getByText('+ CLAUDE_CONFIG_DIR'))
-    const keyInput = screen.getByPlaceholderText('KEY') as HTMLInputElement
-    expect(keyInput.value).toBe('CLAUDE_CONFIG_DIR')
+    const keyInput = screen.getByPlaceholderText('KEY')
+    expect((keyInput as HTMLInputElement).value).toBe('CLAUDE_CONFIG_DIR')
   })
 })

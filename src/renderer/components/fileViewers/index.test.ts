@@ -88,7 +88,7 @@ describe('fileViewers registry', () => {
 
     it('returns false for mostly non-printable content', () => {
       // More than 10% non-printable characters
-      const nonPrintable = String.fromCharCode(1).repeat(20) + 'abc'
+      const nonPrintable = `${String.fromCharCode(1).repeat(20)  }abc`
       expect(isTextContent(nonPrintable)).toBe(false)
     })
 

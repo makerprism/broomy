@@ -8,15 +8,18 @@ vi.mock('electron', () => ({
 }))
 
 vi.mock('fs', () => ({
-  existsSync: vi.fn(),
-  mkdirSync: vi.fn(),
-  readFileSync: vi.fn(),
-  writeFileSync: vi.fn(),
-  readdirSync: vi.fn(),
-  statSync: vi.fn(),
   watch: vi.fn(),
-  appendFileSync: vi.fn(),
-  rmSync: vi.fn(),
+}))
+
+vi.mock('fs/promises', () => ({
+  readdir: vi.fn(),
+  readFile: vi.fn(),
+  writeFile: vi.fn(),
+  appendFile: vi.fn(),
+  stat: vi.fn(),
+  mkdir: vi.fn(),
+  rm: vi.fn(),
+  access: vi.fn(),
 }))
 
 vi.mock('../platform', () => ({
@@ -24,7 +27,8 @@ vi.mock('../platform', () => ({
 }))
 
 import { BrowserWindow } from 'electron'
-import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, statSync, watch, appendFileSync, rmSync } from 'fs'
+import { watch } from 'fs'
+import { readdir, readFile, writeFile, appendFile, stat, mkdir, rm, access } from 'fs/promises'
 import { register } from './fsCore'
 import type { HandlerContext } from './types'
 
@@ -60,6 +64,8 @@ function setupHandlers(ctx?: HandlerContext) {
 describe('fsCore handlers', () => {
   beforeEach(() => {
     vi.resetAllMocks()
+    // Default: access resolves (file exists)
+    vi.mocked(access).mockResolvedValue(undefined)
   })
 
   describe('registration', () => {
@@ -80,9 +86,9 @@ describe('fsCore handlers', () => {
   })
 
   describe('fs:readDir', () => {
-    it('returns mock file tree in E2E mode', () => {
+    it('returns mock file tree in E2E mode', async () => {
       const handlers = setupHandlers(createMockCtx({ isE2ETest: true }))
-      const result = handlers['fs:readDir'](null, '/some/path')
+      const result = await handlers['fs:readDir'](null, '/some/path')
       expect(result).toEqual([
         { name: 'src', path: expect.any(String), isDirectory: true },
         { name: 'package.json', path: expect.any(String), isDirectory: false },
@@ -90,44 +96,44 @@ describe('fsCore handlers', () => {
       ])
     })
 
-    it('returns screenshot-mode mock data for /src path', () => {
+    it('returns screenshot-mode mock data for /src path', async () => {
       const handlers = setupHandlers(createMockCtx({ isE2ETest: true, isScreenshotMode: true }))
-      const result = handlers['fs:readDir'](null, '/project/src')
+      const result = await handlers['fs:readDir'](null, '/project/src')
       expect(result.some((e: { name: string }) => e.name === 'components')).toBe(true)
       expect(result.some((e: { name: string }) => e.name === 'app.ts')).toBe(true)
     })
 
-    it('returns screenshot-mode mock data for /middleware path', () => {
+    it('returns screenshot-mode mock data for /middleware path', async () => {
       const handlers = setupHandlers(createMockCtx({ isE2ETest: true, isScreenshotMode: true }))
-      const result = handlers['fs:readDir'](null, '/project/src/middleware')
+      const result = await handlers['fs:readDir'](null, '/project/src/middleware')
       expect(result.some((e: { name: string }) => e.name === 'auth.ts')).toBe(true)
       expect(result.some((e: { name: string }) => e.name === 'cors.ts')).toBe(true)
     })
 
-    it('returns screenshot-mode mock data for /services path', () => {
+    it('returns screenshot-mode mock data for /services path', async () => {
       const handlers = setupHandlers(createMockCtx({ isE2ETest: true, isScreenshotMode: true }))
-      const result = handlers['fs:readDir'](null, '/project/src/services')
+      const result = await handlers['fs:readDir'](null, '/project/src/services')
       expect(result.some((e: { name: string }) => e.name === 'session.ts')).toBe(true)
       expect(result.some((e: { name: string }) => e.name === 'token.ts')).toBe(true)
     })
 
-    it('returns screenshot-mode mock data for /routes path', () => {
+    it('returns screenshot-mode mock data for /routes path', async () => {
       const handlers = setupHandlers(createMockCtx({ isE2ETest: true, isScreenshotMode: true }))
-      const result = handlers['fs:readDir'](null, '/project/src/routes')
+      const result = await handlers['fs:readDir'](null, '/project/src/routes')
       expect(result.some((e: { name: string }) => e.name === 'auth.ts')).toBe(true)
       expect(result.some((e: { name: string }) => e.name === 'health.ts')).toBe(true)
     })
 
-    it('returns screenshot-mode mock data for root path', () => {
+    it('returns screenshot-mode mock data for root path', async () => {
       const handlers = setupHandlers(createMockCtx({ isE2ETest: true, isScreenshotMode: true }))
-      const result = handlers['fs:readDir'](null, '/project')
+      const result = await handlers['fs:readDir'](null, '/project')
       expect(result.some((e: { name: string }) => e.name === 'src')).toBe(true)
       expect(result.some((e: { name: string }) => e.name === 'package.json')).toBe(true)
       expect(result.some((e: { name: string }) => e.name === 'Dockerfile')).toBe(true)
     })
 
-    it('reads directory entries sorted with dirs first in normal mode', () => {
-      vi.mocked(readdirSync).mockReturnValue([
+    it('reads directory entries sorted with dirs first in normal mode', async () => {
+      vi.mocked(readdir).mockResolvedValue([
         { name: 'b.ts', isDirectory: () => false },
         { name: 'a-dir', isDirectory: () => true },
         { name: '.git', isDirectory: () => true },
@@ -135,7 +141,7 @@ describe('fsCore handlers', () => {
       ] as never)
 
       const handlers = setupHandlers()
-      const result = handlers['fs:readDir'](null, '/project')
+      const result = await handlers['fs:readDir'](null, '/project')
       // .git should be filtered out
       expect(result).toHaveLength(3)
       // Directories first
@@ -146,262 +152,280 @@ describe('fsCore handlers', () => {
       expect(result[2].name).toBe('b.ts')
     })
 
-    it('returns empty array on read error', () => {
-      vi.mocked(readdirSync).mockImplementation(() => { throw new Error('access denied') })
+    it('returns empty array on read error', async () => {
+      vi.mocked(readdir).mockRejectedValue(new Error('access denied'))
       const handlers = setupHandlers()
-      const result = handlers['fs:readDir'](null, '/bad/path')
+      const result = await handlers['fs:readDir'](null, '/bad/path')
       expect(result).toEqual([])
     })
   })
 
   describe('fs:readFile', () => {
-    it('returns mock content in E2E mode', () => {
+    it('returns mock content in E2E mode', async () => {
       const handlers = setupHandlers(createMockCtx({ isE2ETest: true }))
-      const result = handlers['fs:readFile'](null, '/some/file.ts')
+      const result = await handlers['fs:readFile'](null, '/some/file.ts')
       expect(result).toContain('Mock file content')
     })
 
-    it('returns screenshot auth.ts content in screenshot mode', () => {
+    it('returns screenshot auth.ts content in screenshot mode', async () => {
       const handlers = setupHandlers(createMockCtx({ isE2ETest: true, isScreenshotMode: true }))
-      const result = handlers['fs:readFile'](null, '/project/src/middleware/auth.ts')
+      const result = await handlers['fs:readFile'](null, '/project/src/middleware/auth.ts')
       expect(result).toContain('authenticate')
       expect(result).toContain('TokenService')
     })
 
-    it('returns screenshot review.json content in screenshot mode', () => {
+    it('returns screenshot review.json content in screenshot mode', async () => {
       const handlers = setupHandlers(createMockCtx({ isE2ETest: true, isScreenshotMode: true }))
-      const result = handlers['fs:readFile'](null, '/tmp/broomy-review-abc123/review.json')
+      const result = await handlers['fs:readFile'](null, '/tmp/broomy-review-abc123/review.json')
       const parsed = JSON.parse(result)
       expect(parsed.version).toBe(1)
       expect(parsed.prNumber).toBe(47)
       expect(parsed.changePatterns).toHaveLength(3)
     })
 
-    it('returns empty comments array for screenshot comments.json', () => {
+    it('returns empty comments array for screenshot comments.json', async () => {
       const handlers = setupHandlers(createMockCtx({ isE2ETest: true, isScreenshotMode: true }))
-      const result = handlers['fs:readFile'](null, '/tmp/broomy-review-abc123/comments.json')
+      const result = await handlers['fs:readFile'](null, '/tmp/broomy-review-abc123/comments.json')
       expect(result).toBe('[]')
     })
 
-    it('reads file content in normal mode', () => {
-      vi.mocked(existsSync).mockReturnValue(true)
-      vi.mocked(statSync).mockReturnValue({ isDirectory: () => false, size: 100 } as never)
-      vi.mocked(readFileSync).mockReturnValue('file content')
+    it('reads file content in normal mode', async () => {
+      vi.mocked(stat).mockResolvedValue({ isDirectory: () => false, size: 100 } as never)
+      vi.mocked(readFile).mockResolvedValue('file content')
 
       const handlers = setupHandlers()
-      const result = handlers['fs:readFile'](null, '/some/file.ts')
+      const result = await handlers['fs:readFile'](null, '/some/file.ts')
       expect(result).toBe('file content')
     })
 
-    it('throws when file does not exist', () => {
-      vi.mocked(existsSync).mockReturnValue(false)
+    it('throws when file does not exist', async () => {
+      vi.mocked(access).mockRejectedValue(new Error('ENOENT'))
       const handlers = setupHandlers()
-      expect(() => handlers['fs:readFile'](null, '/missing.ts')).toThrow('File not found')
+      await expect(handlers['fs:readFile'](null, '/missing.ts')).rejects.toThrow('File not found')
     })
 
-    it('throws when path is a directory', () => {
-      vi.mocked(existsSync).mockReturnValue(true)
-      vi.mocked(statSync).mockReturnValue({ isDirectory: () => true, size: 0 } as never)
+    it('throws when path is a directory', async () => {
+      vi.mocked(stat).mockResolvedValue({ isDirectory: () => true, size: 0 } as never)
       const handlers = setupHandlers()
-      expect(() => handlers['fs:readFile'](null, '/some/dir')).toThrow('Cannot read directory as file')
+      await expect(handlers['fs:readFile'](null, '/some/dir')).rejects.toThrow('Cannot read directory as file')
     })
 
-    it('throws when file is too large', () => {
-      vi.mocked(existsSync).mockReturnValue(true)
-      vi.mocked(statSync).mockReturnValue({ isDirectory: () => false, size: 6 * 1024 * 1024 } as never)
+    it('throws when file is too large', async () => {
+      vi.mocked(stat).mockResolvedValue({ isDirectory: () => false, size: 6 * 1024 * 1024 } as never)
       const handlers = setupHandlers()
-      expect(() => handlers['fs:readFile'](null, '/big-file.bin')).toThrow('too large')
+      await expect(handlers['fs:readFile'](null, '/big-file.bin')).rejects.toThrow('too large')
     })
   })
 
   describe('fs:writeFile', () => {
-    it('returns success in E2E mode', () => {
+    it('returns success in E2E mode', async () => {
       const handlers = setupHandlers(createMockCtx({ isE2ETest: true }))
-      const result = handlers['fs:writeFile'](null, '/file.ts', 'content')
+      const result = await handlers['fs:writeFile'](null, '/file.ts', 'content')
       expect(result).toEqual({ success: true })
     })
 
-    it('writes file in normal mode', () => {
+    it('writes file in normal mode', async () => {
+      vi.mocked(writeFile).mockResolvedValue(undefined)
       const handlers = setupHandlers()
-      const result = handlers['fs:writeFile'](null, '/file.ts', 'content')
+      const result = await handlers['fs:writeFile'](null, '/file.ts', 'content')
       expect(result).toEqual({ success: true })
-      expect(writeFileSync).toHaveBeenCalledWith('/file.ts', 'content', 'utf-8')
+      expect(writeFile).toHaveBeenCalledWith('/file.ts', 'content', 'utf-8')
     })
 
-    it('returns error when write fails', () => {
-      vi.mocked(writeFileSync).mockImplementation(() => { throw new Error('write error') })
+    it('returns error when write fails', async () => {
+      vi.mocked(writeFile).mockRejectedValue(new Error('write error'))
       const handlers = setupHandlers()
-      const result = handlers['fs:writeFile'](null, '/file.ts', 'content')
+      const result = await handlers['fs:writeFile'](null, '/file.ts', 'content')
       expect(result).toEqual({ success: false, error: expect.stringContaining('write error') })
     })
   })
 
   describe('fs:appendFile', () => {
-    it('returns success in E2E mode', () => {
+    it('returns success in E2E mode', async () => {
       const handlers = setupHandlers(createMockCtx({ isE2ETest: true }))
-      const result = handlers['fs:appendFile'](null, '/file.ts', 'content')
+      const result = await handlers['fs:appendFile'](null, '/file.ts', 'content')
       expect(result).toEqual({ success: true })
     })
 
-    it('appends to file in normal mode', () => {
+    it('appends to file in normal mode', async () => {
+      vi.mocked(appendFile).mockResolvedValue(undefined)
       const handlers = setupHandlers()
-      const result = handlers['fs:appendFile'](null, '/file.ts', 'more content')
+      const result = await handlers['fs:appendFile'](null, '/file.ts', 'more content')
       expect(result).toEqual({ success: true })
-      expect(appendFileSync).toHaveBeenCalledWith('/file.ts', 'more content', 'utf-8')
+      expect(appendFile).toHaveBeenCalledWith('/file.ts', 'more content', 'utf-8')
     })
 
-    it('returns error when append fails', () => {
-      vi.mocked(appendFileSync).mockImplementation(() => { throw new Error('append error') })
+    it('returns error when append fails', async () => {
+      vi.mocked(appendFile).mockRejectedValue(new Error('append error'))
       const handlers = setupHandlers()
-      const result = handlers['fs:appendFile'](null, '/file.ts', 'content')
+      const result = await handlers['fs:appendFile'](null, '/file.ts', 'content')
       expect(result).toEqual({ success: false, error: expect.stringContaining('append error') })
     })
   })
 
   describe('fs:exists', () => {
-    it('returns true for screenshot-mode review files', () => {
+    it('returns true for screenshot-mode review files', async () => {
       const handlers = setupHandlers(createMockCtx({ isE2ETest: true, isScreenshotMode: true }))
-      const result = handlers['fs:exists'](null, '/tmp/broomy-review-abc/review.json')
+      const result = await handlers['fs:exists'](null, '/tmp/broomy-review-abc/review.json')
       expect(result).toBe(true)
     })
 
-    it('delegates to existsSync in normal mode', () => {
-      vi.mocked(existsSync).mockReturnValue(false)
+    it('returns true when file exists', async () => {
+      vi.mocked(access).mockResolvedValue(undefined)
       const handlers = setupHandlers()
-      const result = handlers['fs:exists'](null, '/missing-file.ts')
+      const result = await handlers['fs:exists'](null, '/existing-file.ts')
+      expect(result).toBe(true)
+    })
+
+    it('returns false when file does not exist', async () => {
+      vi.mocked(access).mockRejectedValue(new Error('ENOENT'))
+      const handlers = setupHandlers()
+      const result = await handlers['fs:exists'](null, '/missing-file.ts')
       expect(result).toBe(false)
     })
   })
 
   describe('fs:mkdir', () => {
-    it('returns success in E2E mode', () => {
+    it('returns success in E2E mode', async () => {
       const handlers = setupHandlers(createMockCtx({ isE2ETest: true }))
-      const result = handlers['fs:mkdir'](null, '/new/dir')
+      const result = await handlers['fs:mkdir'](null, '/new/dir')
       expect(result).toEqual({ success: true })
     })
 
-    it('creates directory in normal mode', () => {
-      vi.mocked(existsSync).mockReturnValue(false)
+    it('creates directory in normal mode', async () => {
+      // access rejects = directory does not exist
+      vi.mocked(access).mockRejectedValue(new Error('ENOENT'))
+      vi.mocked(mkdir).mockResolvedValue(undefined)
+
       const handlers = setupHandlers()
-      const result = handlers['fs:mkdir'](null, '/new/dir')
+      const result = await handlers['fs:mkdir'](null, '/new/dir')
       expect(result).toEqual({ success: true })
-      expect(mkdirSync).toHaveBeenCalledWith('/new/dir', { recursive: true })
+      expect(mkdir).toHaveBeenCalledWith('/new/dir', { recursive: true })
     })
 
-    it('returns error when directory already exists', () => {
-      vi.mocked(existsSync).mockReturnValue(true)
+    it('returns error when directory already exists', async () => {
+      // access resolves = directory exists
+      vi.mocked(access).mockResolvedValue(undefined)
+
       const handlers = setupHandlers()
-      const result = handlers['fs:mkdir'](null, '/existing/dir')
+      const result = await handlers['fs:mkdir'](null, '/existing/dir')
       expect(result).toEqual({ success: false, error: 'Directory already exists' })
     })
 
-    it('returns error when mkdir throws', () => {
-      vi.mocked(existsSync).mockReturnValue(false)
-      vi.mocked(mkdirSync).mockImplementation(() => { throw new Error('mkdir error') })
+    it('returns error when mkdir throws', async () => {
+      vi.mocked(access).mockRejectedValue(new Error('ENOENT'))
+      vi.mocked(mkdir).mockRejectedValue(new Error('mkdir error'))
+
       const handlers = setupHandlers()
-      const result = handlers['fs:mkdir'](null, '/bad/dir')
+      const result = await handlers['fs:mkdir'](null, '/bad/dir')
       expect(result).toEqual({ success: false, error: expect.stringContaining('mkdir error') })
     })
   })
 
   describe('fs:rm', () => {
-    it('returns success in E2E mode', () => {
+    it('returns success in E2E mode', async () => {
       const handlers = setupHandlers(createMockCtx({ isE2ETest: true }))
-      const result = handlers['fs:rm'](null, '/some/path')
+      const result = await handlers['fs:rm'](null, '/some/path')
       expect(result).toEqual({ success: true })
     })
 
-    it('removes target in normal mode', () => {
-      vi.mocked(existsSync).mockReturnValue(true)
+    it('removes target in normal mode', async () => {
+      vi.mocked(access).mockResolvedValue(undefined)
+      vi.mocked(rm).mockResolvedValue(undefined)
+
       const handlers = setupHandlers()
-      const result = handlers['fs:rm'](null, '/some/file.ts')
+      const result = await handlers['fs:rm'](null, '/some/file.ts')
       expect(result).toEqual({ success: true })
-      expect(rmSync).toHaveBeenCalledWith('/some/file.ts', { recursive: true, force: true })
+      expect(rm).toHaveBeenCalledWith('/some/file.ts', { recursive: true, force: true })
     })
 
-    it('returns success when target does not exist', () => {
-      vi.mocked(existsSync).mockReturnValue(false)
+    it('returns success when target does not exist', async () => {
+      vi.mocked(access).mockRejectedValue(new Error('ENOENT'))
+
       const handlers = setupHandlers()
-      const result = handlers['fs:rm'](null, '/missing/file.ts')
+      const result = await handlers['fs:rm'](null, '/missing/file.ts')
       expect(result).toEqual({ success: true })
     })
 
-    it('returns error when rm fails', () => {
-      vi.mocked(existsSync).mockReturnValue(true)
-      vi.mocked(rmSync).mockImplementation(() => { throw new Error('rm error') })
+    it('returns error when rm fails', async () => {
+      vi.mocked(access).mockResolvedValue(undefined)
+      vi.mocked(rm).mockRejectedValue(new Error('rm error'))
+
       const handlers = setupHandlers()
-      const result = handlers['fs:rm'](null, '/locked/file.ts')
+      const result = await handlers['fs:rm'](null, '/locked/file.ts')
       expect(result).toEqual({ success: false, error: expect.stringContaining('rm error') })
     })
   })
 
   describe('fs:createFile', () => {
-    it('returns success in E2E mode', () => {
+    it('returns success in E2E mode', async () => {
       const handlers = setupHandlers(createMockCtx({ isE2ETest: true }))
-      const result = handlers['fs:createFile'](null, '/new-file.ts')
+      const result = await handlers['fs:createFile'](null, '/new-file.ts')
       expect(result).toEqual({ success: true })
     })
 
-    it('creates empty file in normal mode', () => {
-      vi.mocked(existsSync).mockReturnValue(false)
+    it('creates empty file in normal mode', async () => {
+      // access rejects = file does not exist
+      vi.mocked(access).mockRejectedValue(new Error('ENOENT'))
+      vi.mocked(writeFile).mockResolvedValue(undefined)
+
       const handlers = setupHandlers()
-      const result = handlers['fs:createFile'](null, '/new-file.ts')
+      const result = await handlers['fs:createFile'](null, '/new-file.ts')
       expect(result).toEqual({ success: true })
-      expect(writeFileSync).toHaveBeenCalledWith('/new-file.ts', '')
+      expect(writeFile).toHaveBeenCalledWith('/new-file.ts', '')
     })
 
-    it('returns error when file already exists', () => {
-      vi.mocked(existsSync).mockReturnValue(true)
+    it('returns error when file already exists', async () => {
+      vi.mocked(access).mockResolvedValue(undefined)
+
       const handlers = setupHandlers()
-      const result = handlers['fs:createFile'](null, '/existing.ts')
+      const result = await handlers['fs:createFile'](null, '/existing.ts')
       expect(result).toEqual({ success: false, error: 'File already exists' })
     })
 
-    it('returns error when createFile throws', () => {
-      vi.mocked(existsSync).mockReturnValue(false)
-      vi.mocked(writeFileSync).mockImplementation(() => { throw new Error('create error') })
+    it('returns error when createFile throws', async () => {
+      vi.mocked(access).mockRejectedValue(new Error('ENOENT'))
+      vi.mocked(writeFile).mockRejectedValue(new Error('create error'))
+
       const handlers = setupHandlers()
-      const result = handlers['fs:createFile'](null, '/bad/file.ts')
+      const result = await handlers['fs:createFile'](null, '/bad/file.ts')
       expect(result).toEqual({ success: false, error: expect.stringContaining('create error') })
     })
   })
 
   describe('fs:readFileBase64', () => {
-    it('returns mock base64 in E2E mode', () => {
+    it('returns mock base64 in E2E mode', async () => {
       const handlers = setupHandlers(createMockCtx({ isE2ETest: true }))
-      const result = handlers['fs:readFileBase64'](null, '/image.png')
+      const result = await handlers['fs:readFileBase64'](null, '/image.png')
       expect(result).toContain('iVBOR')
     })
 
-    it('reads file as base64 in normal mode', () => {
-      vi.mocked(existsSync).mockReturnValue(true)
-      vi.mocked(statSync).mockReturnValue({ isDirectory: () => false, size: 100 } as never)
+    it('reads file as base64 in normal mode', async () => {
+      vi.mocked(stat).mockResolvedValue({ isDirectory: () => false, size: 100 } as never)
       const buf = Buffer.from('hello')
-      vi.mocked(readFileSync).mockReturnValue(buf as never)
+      vi.mocked(readFile).mockResolvedValue(buf as never)
 
       const handlers = setupHandlers()
-      const result = handlers['fs:readFileBase64'](null, '/file.png')
+      const result = await handlers['fs:readFileBase64'](null, '/file.png')
       expect(result).toBe(buf.toString('base64'))
     })
 
-    it('throws when file does not exist', () => {
-      vi.mocked(existsSync).mockReturnValue(false)
+    it('throws when file does not exist', async () => {
+      vi.mocked(access).mockRejectedValue(new Error('ENOENT'))
       const handlers = setupHandlers()
-      expect(() => handlers['fs:readFileBase64'](null, '/missing.png')).toThrow('File not found')
+      await expect(handlers['fs:readFileBase64'](null, '/missing.png')).rejects.toThrow('File not found')
     })
 
-    it('throws when path is a directory', () => {
-      vi.mocked(existsSync).mockReturnValue(true)
-      vi.mocked(statSync).mockReturnValue({ isDirectory: () => true, size: 0 } as never)
+    it('throws when path is a directory', async () => {
+      vi.mocked(stat).mockResolvedValue({ isDirectory: () => true, size: 0 } as never)
       const handlers = setupHandlers()
-      expect(() => handlers['fs:readFileBase64'](null, '/some/dir')).toThrow('Cannot read directory as file')
+      await expect(handlers['fs:readFileBase64'](null, '/some/dir')).rejects.toThrow('Cannot read directory as file')
     })
 
-    it('throws when file is too large', () => {
-      vi.mocked(existsSync).mockReturnValue(true)
-      vi.mocked(statSync).mockReturnValue({ isDirectory: () => false, size: 11 * 1024 * 1024 } as never)
+    it('throws when file is too large', async () => {
+      vi.mocked(stat).mockResolvedValue({ isDirectory: () => false, size: 11 * 1024 * 1024 } as never)
       const handlers = setupHandlers()
-      expect(() => handlers['fs:readFileBase64'](null, '/huge.bin')).toThrow('too large')
+      await expect(handlers['fs:readFileBase64'](null, '/huge.bin')).rejects.toThrow('too large')
     })
   })
 
@@ -444,10 +468,10 @@ describe('fsCore handlers', () => {
     it('sends fs:change events through watcher callback', () => {
       let watchCallback: (eventType: string, filename: string | null) => void = () => {}
       const mockWatcher = { on: vi.fn(), close: vi.fn() }
-      vi.mocked(watch).mockImplementation((_path, _opts, cb) => {
+      vi.mocked(watch).mockImplementation(((_path: string, _opts: unknown, cb: unknown) => {
         watchCallback = cb as (eventType: string, filename: string | null) => void
         return mockWatcher as never
-      })
+      }) as unknown as typeof watch)
       const mockSend = vi.fn()
       const mockWindow = { isDestroyed: () => false, webContents: { send: mockSend } }
       vi.mocked(BrowserWindow.fromWebContents).mockReturnValue(mockWindow as never)
@@ -465,10 +489,10 @@ describe('fsCore handlers', () => {
     it('ignores .git file changes in watcher callback', () => {
       let watchCallback: (eventType: string, filename: string | null) => void = () => {}
       const mockWatcher = { on: vi.fn(), close: vi.fn() }
-      vi.mocked(watch).mockImplementation((_path, _opts, cb) => {
+      vi.mocked(watch).mockImplementation(((_path: string, _opts: unknown, cb: unknown) => {
         watchCallback = cb as (eventType: string, filename: string | null) => void
         return mockWatcher as never
-      })
+      }) as unknown as typeof watch)
       const mockSend = vi.fn()
       const mockWindow = { isDestroyed: () => false, webContents: { send: mockSend } }
       vi.mocked(BrowserWindow.fromWebContents).mockReturnValue(mockWindow as never)
@@ -485,10 +509,10 @@ describe('fsCore handlers', () => {
     it('uses mainWindow when owner window is not available', () => {
       let watchCallback: (eventType: string, filename: string | null) => void = () => {}
       const mockWatcher = { on: vi.fn(), close: vi.fn() }
-      vi.mocked(watch).mockImplementation((_path, _opts, cb) => {
+      vi.mocked(watch).mockImplementation(((_path: string, _opts: unknown, cb: unknown) => {
         watchCallback = cb as (eventType: string, filename: string | null) => void
         return mockWatcher as never
-      })
+      }) as unknown as typeof watch)
       vi.mocked(BrowserWindow.fromWebContents).mockReturnValue(null)
 
       const mockSend = vi.fn()
@@ -515,8 +539,8 @@ describe('fsCore handlers', () => {
       expect(ctx.fileWatchers.has('watch-1')).toBe(true)
 
       // Trigger the error handler
-      const errorHandler = mockWatcher.on.mock.calls.find((c: [string, Function]) => c[0] === 'error')?.[1]
-      errorHandler(new Error('watcher error'))
+      const errorHandler = mockWatcher.on.mock.calls.find((c: unknown[]) => c[0] === 'error')?.[1] as ((err: Error) => void) | undefined
+      errorHandler?.(new Error('watcher error'))
       expect(ctx.fileWatchers.has('watch-1')).toBe(false)
     })
 

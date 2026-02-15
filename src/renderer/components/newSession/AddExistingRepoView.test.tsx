@@ -73,13 +73,13 @@ describe('AddExistingRepoView', () => {
     vi.mocked(window.dialog.openFolder).mockResolvedValue('/repos/my-project')
     vi.mocked(window.git.isGitRepo).mockResolvedValue(true)
     vi.mocked(window.git.worktreeList).mockResolvedValue([
-      { path: '/repos/my-project/main', branch: 'main' },
-      { path: '/repos/my-project/feature-x', branch: 'feature-x' },
+      { path: '/repos/my-project/main', branch: 'main', head: 'abc123' },
+      { path: '/repos/my-project/feature-x', branch: 'feature-x', head: 'abc123' },
     ])
     vi.mocked(window.git.remoteUrl).mockResolvedValue('https://github.com/user/my-project.git')
     vi.mocked(window.git.defaultBranch).mockResolvedValue('main')
     vi.mocked(window.gh.hasWriteAccess).mockResolvedValue(true)
-    vi.mocked(window.config.load).mockResolvedValue({ repos: [{ id: 'new-repo', rootDir: '/repos/my-project', name: 'my-project' }] })
+    vi.mocked(window.config.load).mockResolvedValue({ agents: [], sessions: [], repos: [{ id: 'new-repo', rootDir: '/repos/my-project', name: 'my-project', remoteUrl: 'https://github.com/test/repo', defaultBranch: 'main' }] })
     const addRepo = vi.fn()
     useRepoStore.setState({ addRepo })
 

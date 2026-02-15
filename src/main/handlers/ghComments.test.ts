@@ -2,8 +2,16 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { allowConsoleError } from '../../test/console-guard'
 
 vi.mock('child_process', () => ({
-  execSync: vi.fn(),
+  execFile: vi.fn(),
 }))
+
+vi.mock('util', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('util')>()
+  return {
+    ...actual,
+    promisify: (fn: Function) => fn,
+  }
+})
 
 vi.mock('./types', async (importOriginal) => {
   const actual = await importOriginal<typeof import('./types')>()
@@ -13,7 +21,7 @@ vi.mock('./types', async (importOriginal) => {
   }
 })
 
-import { execSync } from 'child_process'
+import { execFile } from 'child_process'
 import { register } from './ghComments'
 import type { HandlerContext } from './types'
 
@@ -62,83 +70,84 @@ describe('ghComments handlers', () => {
   })
 
   describe('gh:prComments', () => {
-    it('returns mock comments in E2E mode', () => {
+    it('returns mock comments in E2E mode', async () => {
       const handlers = setupHandlers(createMockCtx({ isE2ETest: true }))
-      const result = handlers['gh:prComments'](null, '/repo', 123)
+      const result = await handlers['gh:prComments'](null, '/repo', 123)
       expect(result).toHaveLength(2)
       expect(result[0].author).toBe('reviewer')
       expect(result[0].path).toBe('src/index.ts')
     })
 
-    it('parses gh API output in normal mode', () => {
+    it('parses gh API output in normal mode', async () => {
       const mockOutput = [
         JSON.stringify({ id: 1, body: 'comment 1', path: 'file.ts', line: 5, side: 'RIGHT', author: 'user1', createdAt: '2024-01-01', url: 'https://example.com' }),
         JSON.stringify({ id: 2, body: 'comment 2', path: 'file2.ts', line: 10, side: 'LEFT', author: 'user2', createdAt: '2024-01-02', url: 'https://example.com/2' }),
       ].join('\n')
-      vi.mocked(execSync).mockReturnValue(mockOutput)
+      vi.mocked(execFile).mockResolvedValue({ stdout: mockOutput, stderr: '' } as never)
 
       const handlers = setupHandlers()
-      const result = handlers['gh:prComments'](null, '/repo', 42)
+      const result = await handlers['gh:prComments'](null, '/repo', 42)
       expect(result).toHaveLength(2)
       expect(result[0].id).toBe(1)
       expect(result[1].body).toBe('comment 2')
     })
 
-    it('returns empty array on error', () => {
-      vi.mocked(execSync).mockImplementation(() => { throw new Error('gh not found') })
+    it('returns empty array on error', async () => {
+      vi.mocked(execFile).mockRejectedValue(new Error('gh not found'))
 
       const handlers = setupHandlers()
-      const result = handlers['gh:prComments'](null, '/repo', 42)
+      const result = await handlers['gh:prComments'](null, '/repo', 42)
       expect(result).toEqual([])
     })
 
-    it('filters out malformed JSON lines', () => {
-      vi.mocked(execSync).mockReturnValue('not json\n{}\n')
+    it('filters out malformed JSON lines', async () => {
+      vi.mocked(execFile).mockResolvedValue({ stdout: 'not json\n{}\n', stderr: '' } as never)
 
       const handlers = setupHandlers()
-      const result = handlers['gh:prComments'](null, '/repo', 42)
+      const result = await handlers['gh:prComments'](null, '/repo', 42)
       // "not json" becomes null and gets filtered, {} is valid
       expect(result).toHaveLength(1)
     })
   })
 
   describe('gh:replyToComment', () => {
-    it('returns success in E2E mode', () => {
+    it('returns success in E2E mode', async () => {
       const handlers = setupHandlers(createMockCtx({ isE2ETest: true }))
-      const result = handlers['gh:replyToComment'](null, '/repo', 42, 1, 'reply text')
+      const result = await handlers['gh:replyToComment'](null, '/repo', 42, 1, 'reply text')
       expect(result).toEqual({ success: true })
     })
 
-    it('calls execSync with correct args in normal mode', () => {
-      vi.mocked(execSync).mockReturnValue('')
+    it('calls execFile with correct args in normal mode', async () => {
+      vi.mocked(execFile).mockResolvedValue({ stdout: '', stderr: '' } as never)
 
       const handlers = setupHandlers()
-      const result = handlers['gh:replyToComment'](null, '/repo', 42, 1, 'reply text')
+      const result = await handlers['gh:replyToComment'](null, '/repo', 42, 1, 'reply text')
       expect(result).toEqual({ success: true })
-      expect(execSync).toHaveBeenCalledWith(
-        expect.stringContaining('42/comments'),
+      expect(execFile).toHaveBeenCalledWith(
+        'gh',
+        expect.arrayContaining(['api']),
         expect.objectContaining({ cwd: '/repo' }),
       )
     })
 
-    it('returns error on failure', () => {
-      vi.mocked(execSync).mockImplementation(() => { throw new Error('network error') })
+    it('returns error on failure', async () => {
+      vi.mocked(execFile).mockRejectedValue(new Error('network error'))
 
       const handlers = setupHandlers()
-      const result = handlers['gh:replyToComment'](null, '/repo', 42, 1, 'reply')
+      const result = await handlers['gh:replyToComment'](null, '/repo', 42, 1, 'reply')
       expect(result).toEqual({ success: false, error: expect.stringContaining('network error') })
     })
   })
 
   describe('gh:prsToReview', () => {
-    it('returns mock PRs in E2E mode', () => {
+    it('returns mock PRs in E2E mode', async () => {
       const handlers = setupHandlers(createMockCtx({ isE2ETest: true }))
-      const result = handlers['gh:prsToReview'](null, '/repo')
+      const result = await handlers['gh:prsToReview'](null, '/repo')
       expect(result).toHaveLength(2)
       expect(result[0].title).toContain('dark mode')
     })
 
-    it('parses gh pr list output in normal mode', () => {
+    it('parses gh pr list output in normal mode', async () => {
       const mockPrs = [
         {
           number: 10,
@@ -150,46 +159,46 @@ describe('ghComments handlers', () => {
           labels: [{ name: 'bug' }],
         },
       ]
-      vi.mocked(execSync).mockReturnValue(JSON.stringify(mockPrs))
+      vi.mocked(execFile).mockResolvedValue({ stdout: JSON.stringify(mockPrs), stderr: '' } as never)
 
       const handlers = setupHandlers()
-      const result = handlers['gh:prsToReview'](null, '/repo')
+      const result = await handlers['gh:prsToReview'](null, '/repo')
       expect(result).toHaveLength(1)
       expect(result[0].author).toBe('alice')
       expect(result[0].labels).toEqual(['bug'])
     })
 
-    it('returns empty array on error', () => {
+    it('returns empty array on error', async () => {
       allowConsoleError()
-      vi.mocked(execSync).mockImplementation(() => { throw new Error('gh error') })
+      vi.mocked(execFile).mockRejectedValue(new Error('gh error'))
 
       const handlers = setupHandlers()
-      const result = handlers['gh:prsToReview'](null, '/repo')
+      const result = await handlers['gh:prsToReview'](null, '/repo')
       expect(result).toEqual([])
     })
   })
 
   describe('gh:submitDraftReview', () => {
-    it('returns success with mock reviewId in E2E mode', () => {
+    it('returns success with mock reviewId in E2E mode', async () => {
       const handlers = setupHandlers(createMockCtx({ isE2ETest: true }))
-      const result = handlers['gh:submitDraftReview'](null, '/repo', 42, [])
+      const result = await handlers['gh:submitDraftReview'](null, '/repo', 42, [])
       expect(result).toEqual({ success: true, reviewId: 999 })
     })
 
-    it('creates review via gh API in normal mode', () => {
-      vi.mocked(execSync).mockReturnValue(JSON.stringify({ id: 123 }))
+    it('creates review via gh API in normal mode', async () => {
+      vi.mocked(execFile).mockResolvedValue({ stdout: JSON.stringify({ id: 123 }), stderr: '' } as never)
 
       const handlers = setupHandlers()
       const comments = [{ path: 'file.ts', line: 5, body: 'fix this' }]
-      const result = handlers['gh:submitDraftReview'](null, '/repo', 42, comments)
+      const result = await handlers['gh:submitDraftReview'](null, '/repo', 42, comments)
       expect(result).toEqual({ success: true, reviewId: 123 })
     })
 
-    it('returns error on failure', () => {
-      vi.mocked(execSync).mockImplementation(() => { throw new Error('api error') })
+    it('returns error on failure', async () => {
+      vi.mocked(execFile).mockRejectedValue(new Error('api error'))
 
       const handlers = setupHandlers()
-      const result = handlers['gh:submitDraftReview'](null, '/repo', 42, [])
+      const result = await handlers['gh:submitDraftReview'](null, '/repo', 42, [])
       expect(result).toEqual({ success: false, error: expect.stringContaining('api error') })
     })
   })

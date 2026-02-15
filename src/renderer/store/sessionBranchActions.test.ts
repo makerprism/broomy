@@ -27,7 +27,7 @@ describe('sessionBranchActions', () => {
     vi.useRealTimers()
   })
 
-  function addTestSession(id: string = 'test-session') {
+  function addTestSession(id = 'test-session') {
     const session = {
       id,
       name: 'test',
@@ -44,7 +44,7 @@ describe('sessionBranchActions', () => {
       selectedFilePath: null,
       planFilePath: null,
       fileViewerPosition: 'top' as const,
-      layoutSizes: { explorerWidth: 256, fileViewerSize: 300, userTerminalHeight: 192, diffPanelWidth: 320, reviewPanelWidth: 320 },
+      layoutSizes: { explorerWidth: 256, fileViewerSize: 300, userTerminalHeight: 192, diffPanelWidth: 320, reviewPanelWidth: 320, tutorialPanelWidth: 320 },
       explorerFilter: 'files' as const,
       lastMessage: null,
       lastMessageTime: null,

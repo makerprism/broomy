@@ -11,7 +11,6 @@ vi.mock('child_process', () => ({
 const mockShellOpenExternal = vi.fn()
 const mockDialogShowOpenDialog = vi.fn()
 const mockMenuBuildFromTemplate = vi.fn()
-const mockMenuPopup = vi.fn()
 const mockBrowserWindowFromWebContents = vi.fn()
 
 vi.mock('electron', () => ({
@@ -244,7 +243,7 @@ describe('shell handlers', () => {
 
       mockBrowserWindowFromWebContents.mockReturnValue(mockWindow)
 
-      let capturedTemplate: Array<{ label?: string; click?: () => void; type?: string }> = []
+      let capturedTemplate: { label?: string; click?: () => void; type?: string }[] = []
       mockMenuBuildFromTemplate.mockImplementation((template: typeof capturedTemplate) => {
         capturedTemplate = template
         return {
@@ -292,7 +291,7 @@ describe('shell handlers', () => {
 
       mockBrowserWindowFromWebContents.mockReturnValue(mockWindow)
 
-      let capturedTemplate: Array<{ type?: string; label?: string; enabled?: boolean; click?: () => void }> = []
+      let capturedTemplate: { type?: string; label?: string; enabled?: boolean; click?: () => void }[] = []
       mockMenuBuildFromTemplate.mockImplementation((template: typeof capturedTemplate) => {
         capturedTemplate = template
         return {

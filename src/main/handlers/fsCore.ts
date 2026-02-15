@@ -1,10 +1,11 @@
 import { BrowserWindow, IpcMain, IpcMainInvokeEvent } from 'electron'
-import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, statSync, watch, appendFileSync, rmSync } from 'fs'
+import { watch } from 'fs'
+import { readdir, readFile, writeFile, appendFile, stat, mkdir, rm, access } from 'fs/promises'
 import { join } from 'path'
 import { normalizePath } from '../platform'
 import { HandlerContext } from './types'
 
-function handleReadDir(ctx: HandlerContext, dirPath: string) {
+async function handleReadDir(ctx: HandlerContext, dirPath: string) {
   if (ctx.isE2ETest) {
     if (ctx.isScreenshotMode) {
       if (dirPath.endsWith('/src')) {
@@ -60,7 +61,7 @@ function handleReadDir(ctx: HandlerContext, dirPath: string) {
   }
 
   try {
-    const entries = readdirSync(dirPath, { withFileTypes: true })
+    const entries = await readdir(dirPath, { withFileTypes: true })
     return entries
       .filter((entry) => entry.name !== '.git')
       .map((entry) => ({
@@ -78,7 +79,7 @@ function handleReadDir(ctx: HandlerContext, dirPath: string) {
   }
 }
 
-function handleReadFile(ctx: HandlerContext, filePath: string) {
+async function handleReadFile(ctx: HandlerContext, filePath: string) {
   if (ctx.isE2ETest) {
     if (ctx.isScreenshotMode && filePath.includes('auth.ts')) {
       const IM = 'im' + 'port'
@@ -184,116 +185,134 @@ function handleReadFile(ctx: HandlerContext, filePath: string) {
     return '// Mock file content for E2E tests\nexport const test = true;\n'
   }
 
-  if (!existsSync(filePath)) {
+  try {
+    await access(filePath)
+  } catch {
     throw new Error(`File not found: ${filePath}`)
   }
-  const stats = statSync(filePath)
+  const stats = await stat(filePath)
   if (stats.isDirectory()) {
     throw new Error('Cannot read directory as file')
   }
   if (stats.size > 5 * 1024 * 1024) {
     throw new Error('File is too large to display')
   }
-  return readFileSync(filePath, 'utf-8')
+  return readFile(filePath, 'utf-8')
 }
 
-function handleWriteFile(ctx: HandlerContext, filePath: string, content: string) {
+async function handleWriteFile(ctx: HandlerContext, filePath: string, content: string) {
   if (ctx.isE2ETest) {
     return { success: true }
   }
 
   try {
-    writeFileSync(filePath, content, 'utf-8')
+    await writeFile(filePath, content, 'utf-8')
     return { success: true }
   } catch (error) {
     return { success: false, error: String(error) }
   }
 }
 
-function handleAppendFile(ctx: HandlerContext, filePath: string, content: string) {
+async function handleAppendFile(ctx: HandlerContext, filePath: string, content: string) {
   if (ctx.isE2ETest) {
     return { success: true }
   }
 
   try {
-    appendFileSync(filePath, content, 'utf-8')
+    await appendFile(filePath, content, 'utf-8')
     return { success: true }
   } catch (error) {
     return { success: false, error: String(error) }
   }
 }
 
-function handleExists(ctx: HandlerContext, filePath: string) {
+async function handleExists(ctx: HandlerContext, filePath: string) {
   if (ctx.isScreenshotMode && (/\/tmp\/broomy-review-[^/]+\/(review|comments)\.json$/.exec(filePath))) {
     return true
   }
-  return existsSync(filePath)
+  try {
+    await access(filePath)
+    return true
+  } catch {
+    return false
+  }
 }
 
-function handleMkdir(ctx: HandlerContext, dirPath: string) {
+async function handleMkdir(ctx: HandlerContext, dirPath: string) {
   if (ctx.isE2ETest) {
     return { success: true }
   }
 
   try {
-    if (existsSync(dirPath)) {
+    try {
+      await access(dirPath)
       return { success: false, error: 'Directory already exists' }
+    } catch {
+      // does not exist, proceed
     }
-    mkdirSync(dirPath, { recursive: true })
+    await mkdir(dirPath, { recursive: true })
     return { success: true }
   } catch (error) {
     return { success: false, error: String(error) }
   }
 }
 
-function handleRm(ctx: HandlerContext, targetPath: string) {
+async function handleRm(ctx: HandlerContext, targetPath: string) {
   if (ctx.isE2ETest) {
     return { success: true }
   }
 
   try {
-    if (!existsSync(targetPath)) {
+    try {
+      await access(targetPath)
+    } catch {
       return { success: true }
     }
-    rmSync(targetPath, { recursive: true, force: true })
+    await rm(targetPath, { recursive: true, force: true })
     return { success: true }
   } catch (error) {
     return { success: false, error: String(error) }
   }
 }
 
-function handleCreateFile(ctx: HandlerContext, filePath: string) {
+async function handleCreateFile(ctx: HandlerContext, filePath: string) {
   if (ctx.isE2ETest) {
     return { success: true }
   }
 
   try {
-    if (existsSync(filePath)) {
+    try {
+      await access(filePath)
       return { success: false, error: 'File already exists' }
+    } catch {
+      // does not exist, proceed
     }
-    writeFileSync(filePath, '')
+    await writeFile(filePath, '')
     return { success: true }
   } catch (error) {
     return { success: false, error: String(error) }
   }
 }
 
-function handleReadFileBase64(ctx: HandlerContext, filePath: string) {
+async function handleReadFileBase64(ctx: HandlerContext, filePath: string) {
   if (ctx.isE2ETest) {
     return 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
   }
 
-  if (!existsSync(filePath)) {
+  try {
+    await access(filePath)
+  } catch {
     throw new Error(`File not found: ${filePath}`)
   }
-  const stats = statSync(filePath)
+  const stats = await stat(filePath)
   if (stats.isDirectory()) {
     throw new Error('Cannot read directory as file')
   }
   if (stats.size > 10 * 1024 * 1024) {
     throw new Error('File is too large to display')
   }
-  return readFileSync(filePath).toString('base64')
+  const buffer = await readFile(filePath)
+  return buffer.toString('base64')
 }
 
 function handleWatch(ctx: HandlerContext, _event: IpcMainInvokeEvent, id: string, dirPath: string) {

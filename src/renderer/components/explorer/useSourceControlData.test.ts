@@ -20,7 +20,7 @@ describe('useSourceControlData', () => {
   const defaultProps = {
     directory: '/repos/project',
     gitStatus: [],
-    syncStatus: { current: 'feature/test', tracking: 'origin/feature/test', ahead: 0, behind: 0 },
+    syncStatus: { current: 'feature/test', tracking: 'origin/feature/test', ahead: 0, behind: 0, files: [] },
     scView: 'working' as const,
   }
 
@@ -39,9 +39,9 @@ describe('useSourceControlData', () => {
 
   it('computes staged and unstaged files', () => {
     const gitStatus = [
-      { path: 'src/index.ts', status: 'modified', staged: true },
-      { path: 'src/app.ts', status: 'added', staged: false },
-      { path: 'src/utils.ts', status: 'modified', staged: true },
+      { path: 'src/index.ts', status: 'modified' as const, staged: true, indexStatus: 'M', workingDirStatus: ' ' },
+      { path: 'src/app.ts', status: 'added' as const, staged: false, indexStatus: ' ', workingDirStatus: 'A' },
+      { path: 'src/utils.ts', status: 'modified' as const, staged: true, indexStatus: 'M', workingDirStatus: ' ' },
     ]
     const { result } = renderHook(() =>
       useSourceControlData({ ...defaultProps, gitStatus })
@@ -188,7 +188,7 @@ describe('useSourceControlData', () => {
   })
 
   it('provides the gitStatus from props', () => {
-    const gitStatus = [{ path: 'src/index.ts', status: 'modified', staged: false }]
+    const gitStatus = [{ path: 'src/index.ts', status: 'modified' as const, staged: false, indexStatus: ' ', workingDirStatus: 'M' }]
     const { result } = renderHook(() =>
       useSourceControlData({ ...defaultProps, gitStatus })
     )
@@ -202,6 +202,8 @@ describe('useSourceControlData', () => {
       title: 'Test PR',
       state: 'OPEN',
       url: 'https://github.com/test/pr/42',
+      headRefName: '',
+      baseRefName: '',
     })
     vi.mocked(window.gh.hasWriteAccess).mockResolvedValue(true)
     vi.mocked(window.git.headCommit).mockResolvedValue('abc123')
@@ -218,7 +220,178 @@ describe('useSourceControlData', () => {
       title: 'Test PR',
       state: 'OPEN',
       url: 'https://github.com/test/pr/42',
+      headRefName: '',
+      baseRefName: '',
     })
     expect(result.current.hasWriteAccess).toBe(true)
+  })
+
+  it('handles PR status fetch error gracefully', async () => {
+    vi.mocked(window.gh.prStatus).mockRejectedValue(new Error('network'))
+
+    const { result } = renderHook(() => useSourceControlData(defaultProps))
+
+    await act(async () => {
+      await new Promise(r => setTimeout(r, 0))
+    })
+
+    expect(result.current.prStatus).toBeNull()
+    expect(result.current.hasWriteAccess).toBe(false)
+  })
+
+  it('calls onUpdatePrState when PR status changes', async () => {
+    const onUpdatePrState = vi.fn()
+    vi.mocked(window.gh.prStatus).mockResolvedValue({
+      number: 42,
+      title: 'Test PR',
+      state: 'OPEN',
+      url: 'https://github.com/test/pr/42',
+      headRefName: '',
+      baseRefName: '',
+    })
+    vi.mocked(window.gh.hasWriteAccess).mockResolvedValue(true)
+    vi.mocked(window.git.headCommit).mockResolvedValue('abc123')
+
+    renderHook(() => useSourceControlData({ ...defaultProps, onUpdatePrState }))
+
+    await act(async () => {
+      await new Promise(r => setTimeout(r, 0))
+    })
+
+    expect(onUpdatePrState).toHaveBeenCalledWith('OPEN', 42, 'https://github.com/test/pr/42')
+  })
+
+  it('calls onUpdatePrState with null when no PR', async () => {
+    const onUpdatePrState = vi.fn()
+    vi.mocked(window.gh.prStatus).mockResolvedValue(null)
+    vi.mocked(window.gh.hasWriteAccess).mockResolvedValue(false)
+    vi.mocked(window.git.headCommit).mockResolvedValue(null)
+
+    renderHook(() => useSourceControlData({ ...defaultProps, onUpdatePrState }))
+
+    await act(async () => {
+      await new Promise(r => setTimeout(r, 0))
+    })
+
+    expect(onUpdatePrState).toHaveBeenCalledWith(null)
+  })
+
+  it('fetches PR comments when scView is comments', async () => {
+    vi.mocked(window.gh.prStatus).mockResolvedValue({
+      number: 42,
+      title: 'Test PR',
+      state: 'OPEN',
+      url: 'https://github.com/test/pr/42',
+      headRefName: '',
+      baseRefName: '',
+    })
+    vi.mocked(window.gh.hasWriteAccess).mockResolvedValue(true)
+    vi.mocked(window.git.headCommit).mockResolvedValue('abc123')
+    vi.mocked(window.gh.prComments).mockResolvedValue([
+      { id: 1, body: 'Review comment', author: 'reviewer', path: '', line: null, side: 'RIGHT' as const, createdAt: '', url: '' },
+    ])
+
+    const { result } = renderHook(() =>
+      useSourceControlData({ ...defaultProps, scView: 'comments' })
+    )
+
+    await act(async () => {
+      await new Promise(r => setTimeout(r, 10))
+    })
+
+    expect(result.current.prComments).toEqual([
+      { id: 1, body: 'Review comment', author: 'reviewer', path: '', line: null, side: 'RIGHT' as const, createdAt: '', url: '' },
+    ])
+  })
+
+  it('handles PR comments fetch error', async () => {
+    vi.mocked(window.gh.prStatus).mockResolvedValue({
+      number: 42,
+      title: 'Test PR',
+      state: 'OPEN',
+      url: 'https://github.com/test/pr/42',
+      headRefName: '',
+      baseRefName: '',
+    })
+    vi.mocked(window.gh.hasWriteAccess).mockResolvedValue(true)
+    vi.mocked(window.git.headCommit).mockResolvedValue('abc123')
+    vi.mocked(window.gh.prComments).mockRejectedValue(new Error('network'))
+
+    const { result } = renderHook(() =>
+      useSourceControlData({ ...defaultProps, scView: 'comments' })
+    )
+
+    await act(async () => {
+      await new Promise(r => setTimeout(r, 10))
+    })
+
+    expect(result.current.prComments).toEqual([])
+  })
+
+  it('clears pushed status when there are changes since push', async () => {
+    const onClearPushToMain = vi.fn()
+    vi.mocked(window.git.headCommit).mockResolvedValue('differentcommit')
+
+    renderHook(() =>
+      useSourceControlData({
+        ...defaultProps,
+        pushedToMainAt: Date.now(),
+        pushedToMainCommit: 'oldcommit',
+        onClearPushToMain,
+      })
+    )
+
+    await act(async () => {
+      await new Promise(r => setTimeout(r, 10))
+    })
+
+    expect(onClearPushToMain).toHaveBeenCalled()
+  })
+
+  it('computes hasChangesSincePush as false when commits match', async () => {
+    vi.mocked(window.gh.prStatus).mockResolvedValue(null)
+    vi.mocked(window.gh.hasWriteAccess).mockResolvedValue(false)
+    vi.mocked(window.git.headCommit).mockResolvedValue('samecommit')
+
+    const { result } = renderHook(() =>
+      useSourceControlData({
+        ...defaultProps,
+        pushedToMainCommit: 'samecommit',
+      })
+    )
+
+    await act(async () => {
+      await new Promise(r => setTimeout(r, 10))
+    })
+
+    expect(result.current.hasChangesSincePush).toBe(false)
+  })
+
+  it('does not fetch branch data when scView is not branch', () => {
+    renderHook(() =>
+      useSourceControlData({ ...defaultProps, scView: 'working' })
+    )
+
+    expect(window.git.branchChanges).not.toHaveBeenCalled()
+  })
+
+  it('does not fetch commits data when scView is not commits', () => {
+    renderHook(() =>
+      useSourceControlData({ ...defaultProps, scView: 'working' })
+    )
+
+    expect(window.git.branchCommits).not.toHaveBeenCalled()
+  })
+
+  it('skips PR fetch when no directory', async () => {
+    renderHook(() =>
+      useSourceControlData({ ...defaultProps, directory: undefined })
+    )
+
+    await act(async () => {
+      await new Promise(r => setTimeout(r, 0))
+    })
+
+    expect(window.gh.prStatus).not.toHaveBeenCalled()
   })
 })

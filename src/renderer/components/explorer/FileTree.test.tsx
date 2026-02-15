@@ -5,12 +5,12 @@ import '../../../test/react-setup'
 
 // Mock useFileTree hook to avoid complex async filesystem calls
 const mockUseFileTree = {
-  tree: [],
+  tree: [] as TreeNode[],
   setTree: vi.fn(),
   expandedPaths: new Set<string>(),
   isLoading: false,
   setIsLoading: vi.fn(),
-  inlineInput: null,
+  inlineInput: null as { parentPath: string; type: 'file' | 'folder' } | null,
   setInlineInput: vi.fn(),
   inlineInputValue: '',
   setInlineInputValue: vi.fn(),
@@ -32,6 +32,7 @@ vi.mock('../../hooks/useFileTree', () => ({
   useFileTree: () => mockUseFileTree,
 }))
 
+import type { TreeNode } from './types'
 import { FileTree } from './FileTree'
 
 afterEach(() => {

@@ -24,7 +24,7 @@ function makeParams(overrides: Partial<Parameters<typeof useDividerResize>[0]> =
   }
 }
 
-function fireMouseEvent(type: string, clientX: number, clientY: number = 0) {
+function fireMouseEvent(type: string, clientX: number, clientY = 0) {
   const event = new MouseEvent(type, { clientX, clientY, bubbles: true })
   document.dispatchEvent(event)
 }

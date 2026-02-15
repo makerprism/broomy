@@ -50,7 +50,7 @@ export function checkAndReset(): void {
     violations.push(...w.map((a) => `console.warn(${a.map(String).join(', ')})`))
   }
   if (violations.length > 0) {
-    _origError('Unexpected console output in test:\n  ' + violations.join('\n  '))
+    _origError(`Unexpected console output in test:\n  ${  violations.join('\n  ')}`)
     throw new Error(`Unexpected console output:\n  ${violations.join('\n  ')}`)
   }
 }

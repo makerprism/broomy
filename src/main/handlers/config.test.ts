@@ -16,6 +16,7 @@ vi.mock('fs/promises', () => ({
   rename: vi.fn(),
   copyFile: vi.fn(),
   mkdir: vi.fn(),
+  access: vi.fn(),
 }))
 
 vi.mock('../platform', () => ({
@@ -24,8 +25,8 @@ vi.mock('../platform', () => ({
   makeExecutable: vi.fn(),
 }))
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync } from 'fs'
-import { readFile, writeFile, rename, copyFile, mkdir } from 'fs/promises'
+import { existsSync, mkdirSync, writeFileSync, readdirSync } from 'fs'
+import { readFile, writeFile, rename, copyFile, mkdir, access } from 'fs/promises'
 import { register } from './config'
 import { DEFAULT_AGENTS, DEFAULT_PROFILES, HandlerContext } from './types'
 
@@ -63,6 +64,8 @@ describe('config handlers', () => {
     vi.resetAllMocks()
     // Default: profiles.json already exists (skip migration)
     vi.mocked(existsSync).mockReturnValue(true)
+    // Default: access resolves (file exists) for async handlers
+    vi.mocked(access).mockResolvedValue(undefined)
   })
 
   describe('registration', () => {
@@ -80,65 +83,63 @@ describe('config handlers', () => {
   })
 
   describe('profiles:list', () => {
-    it('returns DEFAULT_PROFILES in E2E mode', () => {
+    it('returns DEFAULT_PROFILES in E2E mode', async () => {
       const handlers = setupHandlers(createMockCtx({ isE2ETest: true }))
-      const result = handlers['profiles:list']()
+      const result = await handlers['profiles:list']()
       expect(result).toEqual(DEFAULT_PROFILES)
     })
 
-    it('reads profiles from file in normal mode', () => {
-      vi.mocked(existsSync).mockReturnValue(true)
+    it('reads profiles from file in normal mode', async () => {
       const mockProfiles = { profiles: [{ id: 'test', name: 'Test', color: '#fff' }], lastProfileId: 'test' }
-      vi.mocked(readFileSync).mockReturnValue(JSON.stringify(mockProfiles))
+      vi.mocked(readFile).mockResolvedValue(JSON.stringify(mockProfiles))
 
       const handlers = setupHandlers()
-      const result = handlers['profiles:list']()
+      const result = await handlers['profiles:list']()
       expect(result).toEqual(mockProfiles)
     })
 
-    it('returns DEFAULT_PROFILES when profiles file does not exist', () => {
-      // First call during registration migration check returns true, subsequent calls vary
-      vi.mocked(existsSync).mockImplementation((path: unknown) => {
-        if (String(path).endsWith('profiles.json')) return false
-        return true
-      })
+    it('returns DEFAULT_PROFILES when profiles file does not exist', async () => {
+      vi.mocked(access).mockRejectedValue(new Error('ENOENT'))
+
       const handlers = setupHandlers()
-      const result = handlers['profiles:list']()
+      const result = await handlers['profiles:list']()
       expect(result).toEqual(DEFAULT_PROFILES)
     })
 
-    it('returns DEFAULT_PROFILES on parse error', () => {
-      vi.mocked(existsSync).mockReturnValue(true)
-      vi.mocked(readFileSync).mockReturnValue('not json')
+    it('returns DEFAULT_PROFILES on parse error', async () => {
+      vi.mocked(readFile).mockResolvedValue('not json')
 
       const handlers = setupHandlers()
-      const result = handlers['profiles:list']()
+      const result = await handlers['profiles:list']()
       expect(result).toEqual(DEFAULT_PROFILES)
     })
   })
 
   describe('profiles:save', () => {
-    it('returns success in E2E mode without writing', () => {
+    it('returns success in E2E mode without writing', async () => {
       const handlers = setupHandlers(createMockCtx({ isE2ETest: true }))
-      const result = handlers['profiles:save'](null, { profiles: [], lastProfileId: 'x' })
+      const result = await handlers['profiles:save'](null, { profiles: [], lastProfileId: 'x' })
       expect(result).toEqual({ success: true })
-      expect(writeFileSync).not.toHaveBeenCalled()
+      expect(writeFile).not.toHaveBeenCalled()
     })
 
-    it('writes profiles to file in normal mode', () => {
-      vi.mocked(existsSync).mockReturnValue(true)
+    it('writes profiles to file in normal mode', async () => {
+      vi.mocked(mkdir).mockResolvedValue(undefined)
+      vi.mocked(writeFile).mockResolvedValue(undefined)
+
       const handlers = setupHandlers()
       const data = { profiles: [{ id: 'p1', name: 'Profile 1', color: '#f00' }], lastProfileId: 'p1' }
-      const result = handlers['profiles:save'](null, data)
+      const result = await handlers['profiles:save'](null, data)
       expect(result).toEqual({ success: true })
-      expect(writeFileSync).toHaveBeenCalledWith(expect.any(String), JSON.stringify(data, null, 2))
+      expect(writeFile).toHaveBeenCalledWith(expect.any(String), JSON.stringify(data, null, 2))
     })
 
-    it('returns error when write fails', () => {
-      vi.mocked(existsSync).mockReturnValue(true)
-      vi.mocked(writeFileSync).mockImplementation(() => { throw new Error('disk full') })
+    it('returns error when write fails', async () => {
+      vi.mocked(mkdir).mockResolvedValue(undefined)
+      vi.mocked(writeFile).mockRejectedValue(new Error('disk full'))
+
       const handlers = setupHandlers()
-      const result = handlers['profiles:save'](null, { profiles: [], lastProfileId: 'x' })
+      const result = await handlers['profiles:save'](null, { profiles: [], lastProfileId: 'x' })
       expect(result).toEqual({ success: false, error: expect.stringContaining('disk full') })
     })
   })
@@ -181,47 +182,42 @@ describe('config handlers', () => {
   })
 
   describe('config:load', () => {
-    it('returns E2E demo data in E2E mode', () => {
+    it('returns E2E demo data in E2E mode', async () => {
       const handlers = setupHandlers(createMockCtx({ isE2ETest: true }))
-      const result = handlers['config:load'](null)
+      const result = await handlers['config:load'](null)
       expect(result).toHaveProperty('agents')
       expect(result).toHaveProperty('sessions')
       expect(result).toHaveProperty('repos')
       expect(result.agents).toEqual(DEFAULT_AGENTS)
     })
 
-    it('returns default agents when config file does not exist', () => {
-      vi.mocked(existsSync).mockImplementation((path: unknown) => {
-        if (String(path).endsWith('profiles.json')) return true
-        return false
-      })
+    it('returns default agents when config file does not exist', async () => {
+      vi.mocked(access).mockRejectedValue(new Error('ENOENT'))
 
       const handlers = setupHandlers()
-      const result = handlers['config:load'](null, 'default')
+      const result = await handlers['config:load'](null, 'default')
       expect(result).toEqual({ agents: DEFAULT_AGENTS, sessions: [] })
     })
 
-    it('reads and returns config from file', () => {
-      vi.mocked(existsSync).mockReturnValue(true)
+    it('reads and returns config from file', async () => {
       const mockConfig = { agents: DEFAULT_AGENTS, sessions: [{ id: '1' }] }
-      vi.mocked(readFileSync).mockReturnValue(JSON.stringify(mockConfig))
+      vi.mocked(readFile).mockResolvedValue(JSON.stringify(mockConfig))
 
       const handlers = setupHandlers()
-      const result = handlers['config:load'](null, 'default')
+      const result = await handlers['config:load'](null, 'default')
       expect(result.sessions).toHaveLength(1)
       expect(result.agents).toEqual(DEFAULT_AGENTS)
     })
 
-    it('merges in new default agents that are not already present', () => {
-      vi.mocked(existsSync).mockReturnValue(true)
+    it('merges in new default agents that are not already present', async () => {
       const mockConfig = {
         agents: [{ id: 'claude', name: 'Claude', command: 'claude', color: '#D97757' }],
         sessions: [],
       }
-      vi.mocked(readFileSync).mockReturnValue(JSON.stringify(mockConfig))
+      vi.mocked(readFile).mockResolvedValue(JSON.stringify(mockConfig))
 
       const handlers = setupHandlers()
-      const result = handlers['config:load'](null, 'default')
+      const result = await handlers['config:load'](null, 'default')
       // Should have the original claude + codex + gemini merged in
       expect(result.agents.length).toBeGreaterThan(1)
       const ids = result.agents.map((a: { id: string }) => a.id)
@@ -229,29 +225,29 @@ describe('config handlers', () => {
       expect(ids).toContain('gemini')
     })
 
-    it('falls back to backup on corrupt primary config', () => {
+    it('falls back to backup on corrupt primary config', async () => {
       allowConsoleWarn()
-      vi.mocked(existsSync).mockReturnValue(true)
       const backupConfig = { agents: DEFAULT_AGENTS, sessions: [{ id: 'backup' }] }
-      vi.mocked(readFileSync).mockImplementation((path: unknown) => {
+      vi.mocked(readFile).mockImplementation(async (path: unknown) => {
         if (String(path).endsWith('.backup')) return JSON.stringify(backupConfig)
         throw new Error('corrupt')
       })
 
       const handlers = setupHandlers()
-      const result = handlers['config:load'](null, 'default')
+      const result = await handlers['config:load'](null, 'default')
       expect(result.sessions).toHaveLength(1)
       expect(result.sessions[0].id).toBe('backup')
     })
 
-    it('returns defaults when both primary and backup fail', () => {
+    it('returns defaults when both primary and backup fail', async () => {
       allowConsoleError()
       allowConsoleWarn()
-      vi.mocked(existsSync).mockReturnValue(true)
-      vi.mocked(readFileSync).mockImplementation(() => { throw new Error('corrupt') })
+      vi.mocked(readFile).mockRejectedValue(new Error('corrupt'))
+      // Backup also doesn't exist
+      vi.mocked(access).mockRejectedValue(new Error('ENOENT'))
 
       const handlers = setupHandlers()
-      const result = handlers['config:load'](null, 'default')
+      const result = await handlers['config:load'](null, 'default')
       expect(result).toEqual({ agents: DEFAULT_AGENTS, sessions: [] })
     })
   })
@@ -264,7 +260,6 @@ describe('config handlers', () => {
     })
 
     it('writes config to file with atomic write pattern', async () => {
-      vi.mocked(existsSync).mockReturnValue(true)
       vi.mocked(readFile).mockResolvedValue('{}')
       vi.mocked(writeFile).mockResolvedValue(undefined)
       vi.mocked(copyFile).mockResolvedValue(undefined)
@@ -282,7 +277,7 @@ describe('config handlers', () => {
     })
 
     it('creates directory if it does not exist', async () => {
-      vi.mocked(existsSync).mockReturnValue(false)
+      vi.mocked(access).mockRejectedValue(new Error('ENOENT'))
       vi.mocked(readFile).mockRejectedValue(new Error('not found'))
       vi.mocked(writeFile).mockResolvedValue(undefined)
       vi.mocked(rename).mockResolvedValue(undefined)
@@ -298,7 +293,6 @@ describe('config handlers', () => {
     })
 
     it('returns error when write fails', async () => {
-      vi.mocked(existsSync).mockReturnValue(true)
       vi.mocked(readFile).mockResolvedValue('{}')
       vi.mocked(writeFile).mockRejectedValue(new Error('disk full'))
 
@@ -311,7 +305,6 @@ describe('config handlers', () => {
     })
 
     it('preserves optional fields like repos and defaultCloneDir', async () => {
-      vi.mocked(existsSync).mockReturnValue(true)
       vi.mocked(readFile).mockResolvedValue('{}')
       vi.mocked(writeFile).mockResolvedValue(undefined)
       vi.mocked(copyFile).mockResolvedValue(undefined)
@@ -338,54 +331,53 @@ describe('config handlers', () => {
   })
 
   describe('repos:getInitScript', () => {
-    it('returns mock script in E2E mode', () => {
+    it('returns mock script in E2E mode', async () => {
       const handlers = setupHandlers(createMockCtx({ isE2ETest: true }))
-      const result = handlers['repos:getInitScript'](null, 'repo1')
+      const result = await handlers['repos:getInitScript'](null, 'repo1')
       expect(result).toContain('echo')
     })
 
-    it('reads init script from file system', () => {
-      vi.mocked(existsSync).mockReturnValue(true)
-      vi.mocked(readFileSync).mockReturnValue('#!/bin/sh\necho hi')
+    it('reads init script from file system', async () => {
+      vi.mocked(readFile).mockResolvedValue('#!/bin/sh\necho hi')
 
       const handlers = setupHandlers()
-      const result = handlers['repos:getInitScript'](null, 'repo1', 'default')
+      const result = await handlers['repos:getInitScript'](null, 'repo1', 'default')
       expect(result).toBe('#!/bin/sh\necho hi')
     })
 
-    it('returns null when script does not exist', () => {
-      vi.mocked(existsSync).mockReturnValue(false)
+    it('returns null when script does not exist', async () => {
+      vi.mocked(access).mockRejectedValue(new Error('ENOENT'))
 
       const handlers = setupHandlers()
-      const result = handlers['repos:getInitScript'](null, 'repo1', 'default')
+      const result = await handlers['repos:getInitScript'](null, 'repo1', 'default')
       expect(result).toBeNull()
     })
   })
 
   describe('repos:saveInitScript', () => {
-    it('returns success in E2E mode without writing', () => {
+    it('returns success in E2E mode without writing', async () => {
       const handlers = setupHandlers(createMockCtx({ isE2ETest: true }))
-      const result = handlers['repos:saveInitScript'](null, 'repo1', '#!/bin/sh\necho hi')
+      const result = await handlers['repos:saveInitScript'](null, 'repo1', '#!/bin/sh\necho hi')
       expect(result).toEqual({ success: true })
     })
 
-    it('writes script to file system', () => {
-      vi.mocked(existsSync).mockReturnValue(true)
+    it('writes script to file system', async () => {
+      vi.mocked(writeFile).mockResolvedValue(undefined)
+
       const handlers = setupHandlers()
-      const result = handlers['repos:saveInitScript'](null, 'repo1', '#!/bin/sh\necho hi', 'default')
+      const result = await handlers['repos:saveInitScript'](null, 'repo1', '#!/bin/sh\necho hi', 'default')
       expect(result).toEqual({ success: true })
-      expect(writeFileSync).toHaveBeenCalled()
+      expect(writeFile).toHaveBeenCalled()
     })
 
-    it('creates init-scripts directory if it does not exist', () => {
-      vi.mocked(existsSync).mockImplementation((path: unknown) => {
-        if (String(path).includes('init-scripts')) return false
-        return true
-      })
+    it('creates init-scripts directory if it does not exist', async () => {
+      vi.mocked(access).mockRejectedValue(new Error('ENOENT'))
+      vi.mocked(mkdir).mockResolvedValue(undefined)
+      vi.mocked(writeFile).mockResolvedValue(undefined)
 
       const handlers = setupHandlers()
-      handlers['repos:saveInitScript'](null, 'repo1', '#!/bin/sh\necho hi', 'default')
-      expect(mkdirSync).toHaveBeenCalledWith(expect.stringContaining('init-scripts'), { recursive: true })
+      await handlers['repos:saveInitScript'](null, 'repo1', '#!/bin/sh\necho hi', 'default')
+      expect(mkdir).toHaveBeenCalledWith(expect.stringContaining('init-scripts'), { recursive: true })
     })
   })
 

@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, cleanup } from '@testing-library/react'
 import '../../test/react-setup'
 import FileViewer from './FileViewer'
+import type { ViewMode } from './FileViewer'
 
 // Mock path-browserify
 vi.mock('path-browserify', () => ({
@@ -16,7 +17,7 @@ const mockViewer = {
   error: null as string | null,
   isDirty: false,
   isSaving: false,
-  viewMode: 'latest' as const,
+  viewMode: 'latest' as ViewMode,
   diffSideBySide: false,
   editorActions: null,
   availableViewers: [{ id: 'monaco', name: 'Code', canHandle: () => true, priority: 1, component: ({ content }: { content: string }) => <div data-testid="viewer-content">{content}</div> }],

@@ -26,7 +26,7 @@ describe('useHelpMenu', () => {
       loadTutorial: mockLoadTutorial,
       markStepComplete: mockMarkStepComplete,
       resetProgress: mockResetProgress,
-    } as unknown as ReturnType<typeof useTutorialStore>)
+    } as unknown)
 
     // Capture the help menu callback
     vi.mocked(window.help.onHelpMenu).mockImplementation((callback) => {

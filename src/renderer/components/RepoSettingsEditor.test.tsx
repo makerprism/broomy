@@ -210,8 +210,8 @@ describe('RepoSettingsEditor', () => {
     await waitFor(() => {
       expect(screen.queryByText('Loading...')).toBeNull()
     })
-    const select = screen.getByRole('combobox') as HTMLSelectElement
-    expect(select.value).toBe('agent-2')
+    const select = screen.getByRole('combobox')
+    expect((select as HTMLSelectElement).value).toBe('agent-2')
   })
 
   it('shows Saving... text while save is in progress', async () => {
