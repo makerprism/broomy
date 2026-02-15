@@ -53,7 +53,7 @@ function makeSession(overrides: Partial<Session> = {}): Session {
     workingStartTime: null,
     recentFiles: [],
     terminalTabs: { tabs: [{ id: 'tab-1', name: 'Terminal' }], activeTabId: 'tab-1' },
-    branchStatus: { status: 'unknown' },
+    branchStatus: 'in-progress' as const,
     isArchived: false,
     ...overrides,
   }
@@ -229,17 +229,15 @@ describe('usePanelsMap', () => {
     expect(result.current[PANEL_IDS.REVIEW]).not.toBeNull()
   })
 
-  it('passes markStepComplete to agentTerminal onUserInput', () => {
-    const markStepComplete = vi.fn()
-    const config = makeConfig({ markStepComplete })
+  it('passes config to agentTerminal onUserInput', () => {
+    const config = makeConfig()
     const { result } = renderHook(() => usePanelsMap(config))
 
     expect(result.current[PANEL_IDS.AGENT_TERMINAL]).not.toBeNull()
   })
 
-  it('passes markStepComplete to userTerminal onUserInput', () => {
-    const markStepComplete = vi.fn()
-    const config = makeConfig({ markStepComplete })
+  it('passes config to userTerminal onUserInput', () => {
+    const config = makeConfig()
     const { result } = renderHook(() => usePanelsMap(config))
 
     expect(result.current[PANEL_IDS.USER_TERMINAL]).not.toBeNull()

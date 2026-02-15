@@ -147,7 +147,7 @@ describe('useTerminalSetup', () => {
     })
 
     // Reset PTY mocks
-    vi.mocked(window.pty.create).mockResolvedValue(undefined)
+    vi.mocked(window.pty.create).mockResolvedValue({ id: 'mock-pty-id' })
     vi.mocked(window.pty.write).mockResolvedValue(undefined)
     vi.mocked(window.pty.resize).mockResolvedValue(undefined)
     vi.mocked(window.pty.kill).mockResolvedValue(undefined)
@@ -437,7 +437,6 @@ describe('useTerminalSetup', () => {
       unmount()
 
       // Should have called updateAgentMonitor with idle on unmount
-      const store = useSessionStore.getState()
       // The store action was called - verify PTY was killed
       expect(window.pty.kill).toHaveBeenCalled()
     })

@@ -12,14 +12,15 @@ describe('useTerminalKeyboard', () => {
   })
 
   function makeKeyEvent(overrides: Partial<KeyboardEvent> & { key: string; type?: string }): KeyboardEvent {
+    const { key, metaKey, ctrlKey, shiftKey, altKey, ...rest } = overrides
     const event = {
       type: 'keydown',
-      key: overrides.key,
-      metaKey: overrides.metaKey ?? false,
-      ctrlKey: overrides.ctrlKey ?? false,
-      shiftKey: overrides.shiftKey ?? false,
-      altKey: overrides.altKey ?? false,
-      ...overrides,
+      key,
+      metaKey: metaKey ?? false,
+      ctrlKey: ctrlKey ?? false,
+      shiftKey: shiftKey ?? false,
+      altKey: altKey ?? false,
+      ...rest,
     } as KeyboardEvent
     return event
   }

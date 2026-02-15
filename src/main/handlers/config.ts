@@ -1,5 +1,5 @@
 import { IpcMain } from 'electron'
-import { existsSync, mkdirSync, readFileSync, writeFileSync, copyFileSync, readdirSync } from 'fs'
+import { existsSync, mkdirSync, writeFileSync, copyFileSync, readdirSync } from 'fs'
 import { readFile, writeFile, rename, copyFile, mkdir, access } from 'fs/promises'
 import { join } from 'path'
 import { makeExecutable } from '../platform'

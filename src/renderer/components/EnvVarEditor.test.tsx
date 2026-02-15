@@ -110,6 +110,6 @@ describe('EnvVarEditor', () => {
     render(<EnvVarEditor env={{}} onChange={vi.fn()} command="claude" />)
     fireEvent.click(screen.getByText('+ CLAUDE_CONFIG_DIR'))
     const keyInput = screen.getByPlaceholderText('KEY')
-    expect(keyInput.value).toBe('CLAUDE_CONFIG_DIR')
+    expect((keyInput as HTMLInputElement).value).toBe('CLAUDE_CONFIG_DIR')
   })
 })

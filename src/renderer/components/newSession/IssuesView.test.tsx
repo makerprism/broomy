@@ -53,8 +53,8 @@ describe('IssuesView', () => {
 
   it('shows issues after loading', async () => {
     vi.mocked(window.gh.issues).mockResolvedValue([
-      { number: 42, title: 'Fix login bug', labels: ['bug'] },
-      { number: 43, title: 'Add dark mode', labels: ['enhancement', 'ui'] },
+      { number: 42, title: 'Fix login bug', labels: ['bug'], url: 'https://github.com/user/my-project/issues/42' },
+      { number: 43, title: 'Add dark mode', labels: ['enhancement', 'ui'], url: 'https://github.com/user/my-project/issues/43' },
     ])
     render(<IssuesView repo={mockRepo} onBack={vi.fn()} onSelectIssue={vi.fn()} />)
     await waitFor(() => {
@@ -67,7 +67,7 @@ describe('IssuesView', () => {
 
   it('renders labels on issues', async () => {
     vi.mocked(window.gh.issues).mockResolvedValue([
-      { number: 42, title: 'Fix login bug', labels: ['bug', 'priority'] },
+      { number: 42, title: 'Fix login bug', labels: ['bug', 'priority'], url: 'https://github.com/user/my-project/issues/42' },
     ])
     render(<IssuesView repo={mockRepo} onBack={vi.fn()} onSelectIssue={vi.fn()} />)
     await waitFor(() => {
@@ -77,7 +77,7 @@ describe('IssuesView', () => {
   })
 
   it('calls onSelectIssue when issue is clicked', async () => {
-    const issue = { number: 42, title: 'Fix login bug', labels: ['bug'] }
+    const issue = { number: 42, title: 'Fix login bug', labels: ['bug'], url: 'https://github.com/user/my-project/issues/42' }
     vi.mocked(window.gh.issues).mockResolvedValue([issue])
     const onSelectIssue = vi.fn()
     render(<IssuesView repo={mockRepo} onBack={vi.fn()} onSelectIssue={onSelectIssue} />)

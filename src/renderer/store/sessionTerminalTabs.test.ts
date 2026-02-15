@@ -44,7 +44,7 @@ describe('sessionTerminalTabs', () => {
       selectedFilePath: null,
       planFilePath: null,
       fileViewerPosition: 'top' as const,
-      layoutSizes: { explorerWidth: 256, fileViewerSize: 300, userTerminalHeight: 192, diffPanelWidth: 320, reviewPanelWidth: 320 },
+      layoutSizes: { explorerWidth: 256, fileViewerSize: 300, userTerminalHeight: 192, diffPanelWidth: 320, reviewPanelWidth: 320, tutorialPanelWidth: 320 },
       explorerFilter: 'files' as const,
       lastMessage: null,
       lastMessageTime: null,
@@ -177,7 +177,7 @@ describe('sessionTerminalTabs', () => {
     it('removes tabs to the right of the specified tab', () => {
       addTestSession()
       useSessionStore.getState().addTerminalTab('test-session', 'Tab 2')
-      const tab3 = useSessionStore.getState().addTerminalTab('test-session', 'Tab 3')
+      useSessionStore.getState().addTerminalTab('test-session', 'Tab 3')
       // Close tabs to the right of tab-1
       useSessionStore.getState().closeTerminalTabsToRight('test-session', 'tab-1')
       const session = useSessionStore.getState().sessions[0]
@@ -187,8 +187,8 @@ describe('sessionTerminalTabs', () => {
 
     it('switches active tab when active tab is to the right', () => {
       addTestSession()
-      const tab2 = useSessionStore.getState().addTerminalTab('test-session', 'Tab 2')
-      const tab3 = useSessionStore.getState().addTerminalTab('test-session', 'Tab 3')
+      useSessionStore.getState().addTerminalTab('test-session', 'Tab 2')
+      useSessionStore.getState().addTerminalTab('test-session', 'Tab 3')
       // tab3 is active, close to right of tab-1
       useSessionStore.getState().closeTerminalTabsToRight('test-session', 'tab-1')
       const session = useSessionStore.getState().sessions[0]
@@ -198,7 +198,7 @@ describe('sessionTerminalTabs', () => {
     it('preserves active tab when it is to the left', () => {
       addTestSession()
       const tab2 = useSessionStore.getState().addTerminalTab('test-session', 'Tab 2')
-      const tab3 = useSessionStore.getState().addTerminalTab('test-session', 'Tab 3')
+      useSessionStore.getState().addTerminalTab('test-session', 'Tab 3')
       // Set tab-1 as active
       useSessionStore.getState().setActiveTerminalTab('test-session', 'tab-1')
       // Close to right of tab2

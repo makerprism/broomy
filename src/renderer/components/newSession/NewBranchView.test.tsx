@@ -80,7 +80,7 @@ describe('NewBranchView', () => {
   })
 
   it('shows issue info when issue is provided', () => {
-    const issue = { number: 42, title: 'Fix login bug', labels: ['bug'] }
+    const issue = { number: 42, title: 'Fix login bug', labels: ['bug'], url: 'https://github.com/user/my-project/issues/42' }
     render(
       <NewBranchView repo={mockRepo} issue={issue} onBack={vi.fn()} onComplete={vi.fn()} />
     )
@@ -90,12 +90,12 @@ describe('NewBranchView', () => {
   })
 
   it('pre-fills branch name from issue', () => {
-    const issue = { number: 42, title: 'Fix login bug', labels: [] }
+    const issue = { number: 42, title: 'Fix login bug', labels: [], url: 'https://github.com/user/my-project/issues/42' }
     render(
       <NewBranchView repo={mockRepo} issue={issue} onBack={vi.fn()} onComplete={vi.fn()} />
     )
     const input = screen.getByPlaceholderText('feature/my-feature')
-    expect(input.value).toContain('42')
+    expect((input as HTMLInputElement).value).toContain('42')
   })
 
   it('creates branch and calls onComplete on success', async () => {

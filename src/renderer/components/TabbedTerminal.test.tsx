@@ -92,7 +92,7 @@ beforeEach(() => {
           ],
           activeTabId: tab1Id,
         },
-        branchStatus: { type: 'unknown' },
+        branchStatus: 'in-progress',
         isArchived: false,
       },
     ],

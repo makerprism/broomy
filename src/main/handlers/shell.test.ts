@@ -11,7 +11,6 @@ vi.mock('child_process', () => ({
 const mockShellOpenExternal = vi.fn()
 const mockDialogShowOpenDialog = vi.fn()
 const mockMenuBuildFromTemplate = vi.fn()
-const mockMenuPopup = vi.fn()
 const mockBrowserWindowFromWebContents = vi.fn()
 
 vi.mock('electron', () => ({

@@ -22,7 +22,7 @@ async function runShellCommand(command: string, options: { cwd?: string; timeout
   const { stdout } = await execAsync(command, {
     ...options,
     encoding: 'utf-8',
-    shell: shell || true,
+    shell: shell || undefined,
   })
   return stdout
 }

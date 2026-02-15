@@ -30,6 +30,7 @@ function makeSession(overrides: Partial<Session> = {}): Session {
       userTerminalHeight: 192,
       diffPanelWidth: 320,
       reviewPanelWidth: 320,
+      tutorialPanelWidth: 320,
     },
     explorerFilter: 'files',
     lastMessage: null,
@@ -518,7 +519,7 @@ describe('useReviewActions', () => {
     })
     vi.mocked(window.fs.mkdir).mockResolvedValue({ success: true })
     vi.mocked(window.gh.prComments).mockResolvedValue([
-      { id: 1, body: 'fix this', path: 'src/app.ts', line: 5, author: 'reviewer' },
+      { id: 1, body: 'fix this', path: 'src/app.ts', line: 5, author: 'reviewer', side: 'RIGHT' as const, createdAt: '2024-01-01', url: 'https://github.com/pr/42/comments/1' },
     ])
     vi.mocked(window.git.getBranch).mockResolvedValue('feature/review')
 

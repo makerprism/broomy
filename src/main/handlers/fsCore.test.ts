@@ -444,7 +444,7 @@ describe('fsCore handlers', () => {
     it('sends fs:change events through watcher callback', () => {
       let watchCallback: (eventType: string, filename: string | null) => void = () => {}
       const mockWatcher = { on: vi.fn(), close: vi.fn() }
-      vi.mocked(watch).mockImplementation((_path, _opts, cb) => {
+      vi.mocked(watch).mockImplementation((_path: string, cb: unknown) => {
         watchCallback = cb as (eventType: string, filename: string | null) => void
         return mockWatcher as never
       })
@@ -465,7 +465,7 @@ describe('fsCore handlers', () => {
     it('ignores .git file changes in watcher callback', () => {
       let watchCallback: (eventType: string, filename: string | null) => void = () => {}
       const mockWatcher = { on: vi.fn(), close: vi.fn() }
-      vi.mocked(watch).mockImplementation((_path, _opts, cb) => {
+      vi.mocked(watch).mockImplementation((_path: string, cb: unknown) => {
         watchCallback = cb as (eventType: string, filename: string | null) => void
         return mockWatcher as never
       })
@@ -485,7 +485,7 @@ describe('fsCore handlers', () => {
     it('uses mainWindow when owner window is not available', () => {
       let watchCallback: (eventType: string, filename: string | null) => void = () => {}
       const mockWatcher = { on: vi.fn(), close: vi.fn() }
-      vi.mocked(watch).mockImplementation((_path, _opts, cb) => {
+      vi.mocked(watch).mockImplementation((_path: string, cb: unknown) => {
         watchCallback = cb as (eventType: string, filename: string | null) => void
         return mockWatcher as never
       })
@@ -515,8 +515,8 @@ describe('fsCore handlers', () => {
       expect(ctx.fileWatchers.has('watch-1')).toBe(true)
 
       // Trigger the error handler
-      const errorHandler = mockWatcher.on.mock.calls.find((c: [string, Function]) => c[0] === 'error')?.[1]
-      errorHandler(new Error('watcher error'))
+      const errorHandler = mockWatcher.on.mock.calls.find((c: unknown[]) => c[0] === 'error')?.[1] as ((err: Error) => void) | undefined
+      errorHandler?.(new Error('watcher error'))
       expect(ctx.fileWatchers.has('watch-1')).toBe(false)
     })
 

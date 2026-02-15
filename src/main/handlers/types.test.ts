@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { join } from 'path'
-import { homedir, tmpdir } from 'os'
+import { homedir } from 'os'
 import {
   CONFIG_DIR,
   PROFILES_DIR,

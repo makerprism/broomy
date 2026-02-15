@@ -100,7 +100,7 @@ describe('ErrorBoundary', () => {
 
   it('shows generic message when error.message is empty', () => {
     const cleanup = suppressJsdomErrors()
-    function EmptyErrorComponent() {
+    function EmptyErrorComponent(): React.ReactNode {
       throw new Error('')
     }
     render(

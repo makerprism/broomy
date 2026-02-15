@@ -116,7 +116,7 @@ export function register(ipcMain: IpcMain, ctx: HandlerContext): void {
     }
   })
 
-  ipcMain.handle('gh:submitDraftReview', async (_event, repoDir: string, prNumber: number, comments: { path: string; line: number; body: string }[]) => {
+  ipcMain.handle('gh:submitDraftReview', async (_event, repoDir: string, prNumber: number, _comments: { path: string; line: number; body: string }[]) => {
     if (ctx.isE2ETest) {
       return { success: true, reviewId: 999 }
     }

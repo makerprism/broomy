@@ -68,13 +68,13 @@ describe('ExistingBranchView', () => {
 
   it('shows branches after loading', async () => {
     vi.mocked(window.git.worktreeList).mockResolvedValue([
-      { path: '/repos/my-project/main', branch: 'main' },
-      { path: '/repos/my-project/feature-x', branch: 'feature-x' },
+      { path: '/repos/my-project/main', branch: 'main', head: 'abc123' },
+      { path: '/repos/my-project/feature-x', branch: 'feature-x', head: 'def456' },
     ])
     vi.mocked(window.git.listBranches).mockResolvedValue([
-      { name: 'feature-x', isRemote: false },
-      { name: 'fix-bug', isRemote: true },
-      { name: 'origin/fix-bug', isRemote: true },
+      { name: 'feature-x', isRemote: false, current: false },
+      { name: 'fix-bug', isRemote: true, current: false },
+      { name: 'origin/fix-bug', isRemote: true, current: false },
     ])
 
     render(
@@ -89,11 +89,11 @@ describe('ExistingBranchView', () => {
 
   it('opens worktree-branch directly when clicking a branch with worktree', async () => {
     vi.mocked(window.git.worktreeList).mockResolvedValue([
-      { path: '/repos/my-project/main', branch: 'main' },
-      { path: '/repos/my-project/feature-x', branch: 'feature-x' },
+      { path: '/repos/my-project/main', branch: 'main', head: 'abc123' },
+      { path: '/repos/my-project/feature-x', branch: 'feature-x', head: 'def456' },
     ])
     vi.mocked(window.git.listBranches).mockResolvedValue([
-      { name: 'feature-x', isRemote: false },
+      { name: 'feature-x', isRemote: false, current: false },
     ])
 
     const onComplete = vi.fn()
@@ -115,10 +115,10 @@ describe('ExistingBranchView', () => {
 
   it('shows create worktree view for remote-only branch', async () => {
     vi.mocked(window.git.worktreeList).mockResolvedValue([
-      { path: '/repos/my-project/main', branch: 'main' },
+      { path: '/repos/my-project/main', branch: 'main', head: 'abc123' },
     ])
     vi.mocked(window.git.listBranches).mockResolvedValue([
-      { name: 'origin/fix-bug', isRemote: true },
+      { name: 'origin/fix-bug', isRemote: true, current: false },
     ])
 
     render(
@@ -139,10 +139,10 @@ describe('ExistingBranchView', () => {
 
   it('creates worktree when Create Worktree is clicked', async () => {
     vi.mocked(window.git.worktreeList).mockResolvedValue([
-      { path: '/repos/my-project/main', branch: 'main' },
+      { path: '/repos/my-project/main', branch: 'main', head: 'abc123' },
     ])
     vi.mocked(window.git.listBranches).mockResolvedValue([
-      { name: 'origin/fix-bug', isRemote: true },
+      { name: 'origin/fix-bug', isRemote: true, current: false },
     ])
     vi.mocked(window.git.worktreeAdd).mockResolvedValue({ success: true })
     vi.mocked(window.repos.getInitScript).mockResolvedValue('')
@@ -177,10 +177,10 @@ describe('ExistingBranchView', () => {
 
   it('shows error when worktree creation fails', async () => {
     vi.mocked(window.git.worktreeList).mockResolvedValue([
-      { path: '/repos/my-project/main', branch: 'main' },
+      { path: '/repos/my-project/main', branch: 'main', head: 'abc123' },
     ])
     vi.mocked(window.git.listBranches).mockResolvedValue([
-      { name: 'origin/fix-bug', isRemote: true },
+      { name: 'origin/fix-bug', isRemote: true, current: false },
     ])
     vi.mocked(window.git.worktreeAdd).mockResolvedValue({ success: false, error: 'Branch exists' })
 
@@ -207,11 +207,11 @@ describe('ExistingBranchView', () => {
 
   it('filters branches by search query', async () => {
     vi.mocked(window.git.worktreeList).mockResolvedValue([
-      { path: '/repos/my-project/main', branch: 'main' },
+      { path: '/repos/my-project/main', branch: 'main', head: 'abc123' },
     ])
     vi.mocked(window.git.listBranches).mockResolvedValue([
-      { name: 'feature-auth', isRemote: false },
-      { name: 'fix-bug', isRemote: false },
+      { name: 'feature-auth', isRemote: false, current: false },
+      { name: 'fix-bug', isRemote: false, current: false },
     ])
 
     render(
@@ -232,10 +232,10 @@ describe('ExistingBranchView', () => {
 
   it('shows no matches message when search has no results', async () => {
     vi.mocked(window.git.worktreeList).mockResolvedValue([
-      { path: '/repos/my-project/main', branch: 'main' },
+      { path: '/repos/my-project/main', branch: 'main', head: 'abc123' },
     ])
     vi.mocked(window.git.listBranches).mockResolvedValue([
-      { name: 'feature-auth', isRemote: false },
+      { name: 'feature-auth', isRemote: false, current: false },
     ])
 
     render(

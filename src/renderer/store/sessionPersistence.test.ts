@@ -30,7 +30,7 @@ describe('sessionPersistence', () => {
           [PANEL_IDS.EXPLORER]: true,
           [PANEL_IDS.FILE_VIEWER]: false,
         },
-      } as Session
+      } as unknown as Session
 
       const result = syncLegacyFields(session)
       expect(result.showAgentTerminal).toBe(false)
