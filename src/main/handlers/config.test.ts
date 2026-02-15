@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { allowConsoleError, allowConsoleWarn } from '../../test/console-guard'
 
 vi.mock('fs', () => ({
   existsSync: vi.fn(),
@@ -229,6 +230,7 @@ describe('config handlers', () => {
     })
 
     it('falls back to backup on corrupt primary config', () => {
+      allowConsoleWarn()
       vi.mocked(existsSync).mockReturnValue(true)
       const backupConfig = { agents: DEFAULT_AGENTS, sessions: [{ id: 'backup' }] }
       vi.mocked(readFileSync).mockImplementation((path: unknown) => {
@@ -243,6 +245,8 @@ describe('config handlers', () => {
     })
 
     it('returns defaults when both primary and backup fail', () => {
+      allowConsoleError()
+      allowConsoleWarn()
       vi.mocked(existsSync).mockReturnValue(true)
       vi.mocked(readFileSync).mockImplementation(() => { throw new Error('corrupt') })
 

@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { allowConsoleError } from '../../test/console-guard'
 
 vi.mock('child_process', () => ({
   execSync: vi.fn(),
@@ -159,6 +160,7 @@ describe('ghComments handlers', () => {
     })
 
     it('returns empty array on error', () => {
+      allowConsoleError()
       vi.mocked(execSync).mockImplementation(() => { throw new Error('gh error') })
 
       const handlers = setupHandlers()

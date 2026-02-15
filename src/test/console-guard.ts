@@ -15,7 +15,6 @@ let errorsAllowed = false
 let warnsAllowed = false
 
 const _origError = console.error.bind(console)
-const _origWarn = console.warn.bind(console)
 
 console.error = (...args: unknown[]) => {
   errors.push(args)

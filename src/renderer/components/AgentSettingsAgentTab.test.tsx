@@ -2,6 +2,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent, cleanup } from '@testing-library/react'
 import '../../test/react-setup'
+import { allowConsoleError } from '../../test/console-guard'
 import { AgentSettingsAgentTab } from './AgentSettingsAgentTab'
 import type { AgentConfig } from '../store/agents'
 import { createRef } from 'react'
@@ -70,6 +71,7 @@ describe('AgentSettingsAgentTab', () => {
   })
 
   it('does not show empty state when showAddForm is true', () => {
+    allowConsoleError() // React forwardRef warning
     render(<AgentSettingsAgentTab {...defaultProps} agents={[]} showAddForm={true} />)
     expect(screen.queryByText('No agents configured.')).toBeNull()
   })
@@ -88,6 +90,7 @@ describe('AgentSettingsAgentTab', () => {
   })
 
   it('hides "+ Add Agent" button when editing an agent', () => {
+    allowConsoleError() // React forwardRef warning
     render(<AgentSettingsAgentTab {...defaultProps} editingId="agent-1" />)
     expect(screen.queryByText('+ Add Agent')).toBeNull()
   })

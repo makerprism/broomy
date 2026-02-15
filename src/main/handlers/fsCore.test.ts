@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { allowConsoleError } from '../../test/console-guard'
 
 vi.mock('electron', () => ({
   BrowserWindow: {
@@ -502,6 +503,7 @@ describe('fsCore handlers', () => {
     })
 
     it('handles watcher error by removing from map', () => {
+      allowConsoleError()
       const mockWatcher = { on: vi.fn(), close: vi.fn() }
       vi.mocked(watch).mockReturnValue(mockWatcher as never)
       vi.mocked(BrowserWindow.fromWebContents).mockReturnValue(null)
@@ -519,6 +521,7 @@ describe('fsCore handlers', () => {
     })
 
     it('returns error when watch throws', () => {
+      allowConsoleError()
       vi.mocked(watch).mockImplementation(() => { throw new Error('watch failed') })
       vi.mocked(BrowserWindow.fromWebContents).mockReturnValue(null)
 

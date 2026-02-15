@@ -1,8 +1,10 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { useErrorStore } from './errors'
+import { allowConsoleError } from '../../test/console-guard'
 
 describe('useErrorStore', () => {
   beforeEach(() => {
+    allowConsoleError()
     useErrorStore.setState({ errors: [], hasUnread: false, detailError: null })
   })
 

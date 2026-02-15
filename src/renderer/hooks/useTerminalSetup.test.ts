@@ -4,6 +4,7 @@ import { renderHook, act } from '@testing-library/react'
 import { useTerminalSetup, type TerminalConfig } from './useTerminalSetup'
 import { useSessionStore } from '../store/sessions'
 import { useErrorStore } from '../store/errors'
+import { allowConsoleError } from '../../test/console-guard'
 import { PANEL_IDS, DEFAULT_TOOLBAR_PANELS } from '../panels/types'
 import { terminalBufferRegistry } from '../utils/terminalBufferRegistry'
 
@@ -306,6 +307,7 @@ describe('useTerminalSetup', () => {
   })
 
   it('handles PTY creation error gracefully', async () => {
+    allowConsoleError()
     vi.mocked(window.pty.create).mockRejectedValue(new Error('PTY failed'))
 
     const config = makeConfig()

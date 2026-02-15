@@ -3,9 +3,11 @@ import { describe, it, expect, beforeEach } from 'vitest'
 import { renderHook } from '@testing-library/react'
 import { useAppBannerError, usePanelBannerError, useDialogBannerError } from './useErrorBanners'
 import { useErrorStore } from '../store/errors'
+import { allowConsoleError } from '../../test/console-guard'
 
 describe('useErrorBanners', () => {
   beforeEach(() => {
+    allowConsoleError()
     useErrorStore.setState({ errors: [], hasUnread: false, detailError: null })
   })
 

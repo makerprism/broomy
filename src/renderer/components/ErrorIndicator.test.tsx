@@ -4,12 +4,14 @@ import { render, screen, fireEvent, cleanup } from '@testing-library/react'
 import '../../test/react-setup'
 import ErrorIndicator from './ErrorIndicator'
 import { useErrorStore } from '../store/errors'
+import { allowConsoleError } from '../../test/console-guard'
 
 afterEach(() => {
   cleanup()
 })
 
 beforeEach(() => {
+  allowConsoleError()
   useErrorStore.setState({ errors: [], hasUnread: false, detailError: null })
   vi.clearAllMocks()
 })

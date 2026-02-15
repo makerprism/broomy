@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi } from 'vitest'
 import { renderHook } from '@testing-library/react'
+import { allowConsoleError } from '../../test/console-guard'
 import { PanelProvider, usePanelRegistry, usePanelContext, usePanelVisibility, usePanelToggle, useToolbarPanels } from './PanelContext'
 import { PANEL_IDS } from './types'
 import type { ReactNode } from 'react'
@@ -19,6 +20,7 @@ function createWrapper(toolbarPanels: string[] = ['sidebar', 'explorer', 'agentT
 describe('PanelContext', () => {
   describe('usePanelRegistry', () => {
     it('throws when used outside PanelProvider', () => {
+      allowConsoleError()
       expect(() => {
         renderHook(() => usePanelRegistry())
       }).toThrow('usePanelRegistry must be used within a PanelProvider')
@@ -33,6 +35,7 @@ describe('PanelContext', () => {
 
   describe('usePanelContext', () => {
     it('throws when used outside PanelProvider', () => {
+      allowConsoleError()
       expect(() => {
         renderHook(() => usePanelContext())
       }).toThrow('usePanelContext must be used within a PanelProvider')

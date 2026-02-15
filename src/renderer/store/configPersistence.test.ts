@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { allowConsoleWarn } from '../../test/console-guard'
 import {
   scheduleSave,
   setCurrentProfileId,
@@ -137,6 +138,8 @@ describe('configPersistence', () => {
   })
 
   describe('save guards', () => {
+    beforeEach(() => { allowConsoleWarn() })
+
     it('refuses to save when sessions are empty but were previously loaded', async () => {
       setLoadedCounts({ sessions: 3 })
       useAgentStore.setState({ agents: [{ id: 'a1', name: 'Test', command: 'test' }] })

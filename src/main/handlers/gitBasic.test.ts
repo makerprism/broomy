@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { allowConsoleError } from '../../test/console-guard'
 
 const mockGitInstance = {
   status: vi.fn(),
@@ -440,6 +441,7 @@ describe('gitBasic handlers', () => {
     })
 
     it('returns empty string on error', async () => {
+      allowConsoleError()
       mockGitInstance.raw.mockRejectedValue(new Error('fail'))
       const handlers = setupHandlers()
       expect(await handlers['git:show'](null, '/repo', 'file.ts')).toBe('')

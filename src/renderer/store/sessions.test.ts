@@ -3,6 +3,7 @@ import { useSessionStore } from './sessions'
 import { PANEL_IDS, DEFAULT_TOOLBAR_PANELS } from '../panels/types'
 import { getLoadedSessionCount } from './sessionPersistence'
 import { setLoadedCounts } from './configPersistence'
+import { allowConsoleError, allowConsoleWarn } from '../../test/console-guard'
 
 describe('useSessionStore', () => {
   beforeEach(() => {
@@ -183,6 +184,8 @@ describe('useSessionStore', () => {
     })
 
     it('sets empty UI state on config.load failure without updating loadedSessionCount', async () => {
+      allowConsoleError()
+      allowConsoleWarn()
       // First load some sessions so loadedSessionCount > 0
       vi.mocked(window.config.load).mockResolvedValue({
         agents: [],
@@ -205,6 +208,7 @@ describe('useSessionStore', () => {
     })
 
     it('loads remaining sessions when git.getBranch fails for one session', async () => {
+      allowConsoleWarn()
       vi.mocked(window.config.load).mockResolvedValue({
         agents: [],
         sessions: [
@@ -1054,6 +1058,7 @@ describe('useSessionStore', () => {
     })
 
     it('refuses to save empty sessions when sessions were previously loaded', async () => {
+      allowConsoleWarn()
       // Load 2 sessions from config
       vi.mocked(window.config.load).mockResolvedValue({
         agents: [],
