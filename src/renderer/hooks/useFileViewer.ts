@@ -59,7 +59,7 @@ export function useFileViewer({
     diffCurrentRef,
   })
 
-  const { fileChangedOnDisk, handleKeepLocalChanges, handleLoadDiskVersion } = useFileWatcher({
+  const { fileChangedOnDisk, handleKeepLocalChanges, handleLoadDiskVersion, checkForExternalChanges } = useFileWatcher({
     filePath,
     content,
     setContent,
@@ -91,8 +91,12 @@ export function useFileViewer({
   }, [filePath, initialViewMode, canShowDiff])
 
   // Save handler (called by editor on Cmd+S)
-  const handleSave = useCallback(async (newContent: string) => {
-    if (!filePath) return
+  // Returns false if the save was aborted due to external changes.
+  const handleSave = useCallback(async (newContent: string): Promise<boolean> => {
+    if (!filePath) return false
+    // Check if the file was modified externally since we loaded it
+    const hasExternalChanges = await checkForExternalChanges()
+    if (hasExternalChanges) return false
     setIsSaving(true)
     try {
       const result = await window.fs.writeFile(filePath, newContent)
@@ -103,15 +107,16 @@ export function useFileViewer({
       setEditedContent(newContent)
       setIsDirty(false)
       onSaveComplete?.()
+      return true
     } finally {
       setIsSaving(false)
     }
-  }, [filePath, onSaveComplete])
+  }, [filePath, onSaveComplete, checkForExternalChanges])
 
   // Expose save function to parent via ref
   useEffect(() => {
     if (saveRef) {
-      saveRef.current = isDirty && editedContent ? () => handleSave(editedContent) : null
+      saveRef.current = isDirty && editedContent ? async () => { await handleSave(editedContent) } : null
     }
     return () => {
       if (saveRef) saveRef.current = null
