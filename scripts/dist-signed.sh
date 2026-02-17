@@ -58,6 +58,11 @@ if ! security find-identity -v -p codesigning | grep -q "$CSC_NAME"; then
 fi
 echo "  Found: $CSC_NAME"
 
+# --- Clean previous build artifacts ---
+echo ""
+echo "Cleaning dist/..."
+rm -rf dist
+
 # --- Build ---
 echo ""
 echo "Building app..."
