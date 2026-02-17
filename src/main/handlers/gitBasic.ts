@@ -49,6 +49,7 @@ async function handleStatus(ctx: HandlerContext, repoPath: string) {
         behind: 0,
         tracking: 'origin/feature/jwt-auth',
         current: E2E_MOCK_BRANCHES[repoPath] || 'main',
+        isMerging: false,
       }
     }
     return {
@@ -60,6 +61,7 @@ async function handleStatus(ctx: HandlerContext, repoPath: string) {
       behind: 0,
       tracking: null,
       current: E2E_MOCK_BRANCHES[repoPath] || 'main',
+      isMerging: false,
     }
   }
 
@@ -87,15 +89,18 @@ async function handleStatus(ctx: HandlerContext, repoPath: string) {
       }
     }
 
+    const isMerging = await git.raw(['rev-parse', '--verify', 'MERGE_HEAD']).then(() => true).catch(() => false)
+
     return {
       files,
       ahead: status.ahead,
       behind: status.behind,
       tracking: status.tracking,
       current: status.current,
+      isMerging,
     }
   } catch {
-    return { files: [], ahead: 0, behind: 0, tracking: null, current: null }
+    return { files: [], ahead: 0, behind: 0, tracking: null, current: null, isMerging: false }
   }
 }
 
@@ -167,6 +172,20 @@ async function handleCommit(ctx: HandlerContext, repoPath: string, message: stri
   try {
     const git = simpleGit(repoPath)
     await git.commit(message)
+    return { success: true }
+  } catch (error) {
+    return { success: false, error: String(error) }
+  }
+}
+
+async function handleCommitMerge(ctx: HandlerContext, repoPath: string) {
+  if (ctx.isE2ETest) {
+    return { success: true }
+  }
+
+  try {
+    const git = simpleGit(repoPath)
+    await git.raw(['commit', '--no-edit'])
     return { success: true }
   } catch (error) {
     return { success: false, error: String(error) }
@@ -322,6 +341,7 @@ export function register(ipcMain: IpcMain, ctx: HandlerContext): void {
   ipcMain.handle('git:unstage', (_event, repoPath: string, filePath: string) => handleUnstage(ctx, repoPath, filePath))
   ipcMain.handle('git:checkoutFile', (_event, repoPath: string, filePath: string) => handleCheckoutFile(ctx, repoPath, filePath))
   ipcMain.handle('git:commit', (_event, repoPath: string, message: string) => handleCommit(ctx, repoPath, message))
+  ipcMain.handle('git:commitMerge', (_event, repoPath: string) => handleCommitMerge(ctx, repoPath))
   ipcMain.handle('git:push', (_event, repoPath: string) => handlePush(ctx, repoPath))
   ipcMain.handle('git:pull', (_event, repoPath: string) => handlePull(ctx, repoPath))
   ipcMain.handle('git:diff', (_event, repoPath: string, filePath?: string) => handleDiff(ctx, repoPath, filePath))

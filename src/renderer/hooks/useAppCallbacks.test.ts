@@ -20,6 +20,7 @@ function makeDeps(overrides: Partial<Parameters<typeof useAppCallbacks>[0]> = {}
     setFileViewerPosition: vi.fn(),
     updatePrState: vi.fn(),
     setShowNewSessionDialog: vi.fn(),
+    onSessionAlreadyExists: vi.fn(),
     ...overrides,
   }
 }
@@ -62,6 +63,29 @@ describe('useAppCallbacks', () => {
     const { result } = renderHook(() => useAppCallbacks(deps))
     await act(() => result.current.handleNewSessionComplete('/dir', null, extra))
     expect(deps.addSession).toHaveBeenCalledWith('/dir', null, extra)
+  })
+
+  it('handleNewSessionComplete calls onSessionAlreadyExists when addSession returns duplicate info', async () => {
+    const onSessionAlreadyExists = vi.fn()
+    const deps = makeDeps({
+      addSession: vi.fn().mockResolvedValue({ existingSessionId: 's1', existingSessionName: 'my-session', wasArchived: false }),
+      onSessionAlreadyExists,
+    })
+    const { result } = renderHook(() => useAppCallbacks(deps))
+    await act(() => result.current.handleNewSessionComplete('/dir', 'agent-1'))
+    expect(onSessionAlreadyExists).toHaveBeenCalledWith({ name: 'my-session', wasArchived: false })
+    expect(deps.setShowNewSessionDialog).toHaveBeenCalledWith(false)
+  })
+
+  it('handleNewSessionComplete calls onSessionAlreadyExists with wasArchived=true for archived duplicates', async () => {
+    const onSessionAlreadyExists = vi.fn()
+    const deps = makeDeps({
+      addSession: vi.fn().mockResolvedValue({ existingSessionId: 's1', existingSessionName: 'archived-session', wasArchived: true }),
+      onSessionAlreadyExists,
+    })
+    const { result } = renderHook(() => useAppCallbacks(deps))
+    await act(() => result.current.handleNewSessionComplete('/dir', null))
+    expect(onSessionAlreadyExists).toHaveBeenCalledWith({ name: 'archived-session', wasArchived: true })
   })
 
   it('handleNewSessionComplete records error and still hides dialog when addSession rejects', async () => {

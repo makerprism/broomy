@@ -35,6 +35,7 @@ export type GitApi = {
   hasBranchCommits: (repoPath: string, ref: string) => Promise<boolean>
   pullOriginMain: (repoPath: string) => Promise<{ success: boolean; hasConflicts?: boolean; error?: string }>
   isBehindMain: (repoPath: string) => Promise<{ behind: number; defaultBranch: string }>
+  commitMerge: (repoPath: string) => Promise<{ success: boolean; error?: string }>
   getConfig: (repoPath: string, key: string) => Promise<string | null>
   setConfig: (repoPath: string, key: string, value: string) => Promise<{ success: boolean; error?: string }>
 }
@@ -73,6 +74,7 @@ export const gitApi: GitApi = {
   hasBranchCommits: (repoPath, ref) => ipcRenderer.invoke('git:hasBranchCommits', repoPath, ref),
   pullOriginMain: (repoPath) => ipcRenderer.invoke('git:pullOriginMain', repoPath),
   isBehindMain: (repoPath) => ipcRenderer.invoke('git:isBehindMain', repoPath),
+  commitMerge: (repoPath) => ipcRenderer.invoke('git:commitMerge', repoPath),
   getConfig: (repoPath, key) => ipcRenderer.invoke('git:getConfig', repoPath, key),
   setConfig: (repoPath, key, value) => ipcRenderer.invoke('git:setConfig', repoPath, key, value),
 }

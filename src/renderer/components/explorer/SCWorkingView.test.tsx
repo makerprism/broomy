@@ -23,13 +23,16 @@ const defaultProps = {
   commitMessage: '',
   setCommitMessage: vi.fn(),
   isCommitting: false,
+  isMerging: false,
   commitError: null as string | null,
   commitErrorExpanded: false,
   setCommitErrorExpanded: vi.fn(),
   setCommitError: vi.fn(),
   isSyncing: false,
   onCommit: vi.fn(),
+  onCommitMerge: vi.fn(),
   onSync: vi.fn(),
+  onSyncWithMain: vi.fn(),
   onPushNewBranch: vi.fn(),
   onStage: vi.fn(),
   onStageAll: vi.fn(),
@@ -42,6 +45,9 @@ const defaultProps = {
   allowPushToMain: true,
   onCreatePr: vi.fn(),
   onPushToMain: vi.fn(),
+  behindMainCount: 0,
+  isFetchingBehindMain: false,
+  isSyncingWithMain: false,
 }
 
 describe('SCWorkingView', () => {
@@ -254,6 +260,126 @@ describe('SCWorkingView', () => {
       await fireEvent.contextMenu(changesHeader)
       // menu.popup should have been called
       expect(window.menu.popup).toHaveBeenCalled()
+    })
+
+    it('shows Commit Merge button when isMerging is true', () => {
+      render(<SCWorkingView {...changesProps} isMerging={true} />)
+      expect(screen.getByText('Commit Merge')).toBeTruthy()
+      expect(screen.queryByPlaceholderText('Commit message')).toBeNull()
+    })
+
+    it('calls onCommitMerge when Commit Merge is clicked', () => {
+      const onCommitMerge = vi.fn()
+      render(<SCWorkingView {...changesProps} isMerging={true} onCommitMerge={onCommitMerge} />)
+      fireEvent.click(screen.getByText('Commit Merge'))
+      expect(onCommitMerge).toHaveBeenCalled()
+    })
+
+    it('shows Committing... on merge commit button when committing', () => {
+      render(<SCWorkingView {...changesProps} isMerging={true} isCommitting={true} />)
+      expect(screen.getByText('Committing...')).toBeTruthy()
+    })
+
+    it('shows normal commit input when not merging', () => {
+      render(<SCWorkingView {...changesProps} isMerging={false} />)
+      expect(screen.getByPlaceholderText('Commit message')).toBeTruthy()
+      expect(screen.queryByText('Commit Merge')).toBeNull()
+    })
+  })
+
+  describe('Behind main indicator', () => {
+    it('shows behind main banner when pushed and behind', () => {
+      render(
+        <SCWorkingView
+          {...defaultProps}
+          branchStatus="pushed"
+          behindMainCount={3}
+        />
+      )
+      expect(screen.getByText(/main has 3 new commits/)).toBeTruthy()
+      expect(screen.getByText('Get latest from main')).toBeTruthy()
+    })
+
+    it('shows singular commit text when behind by 1', () => {
+      render(
+        <SCWorkingView
+          {...defaultProps}
+          branchStatus="pushed"
+          behindMainCount={1}
+        />
+      )
+      expect(screen.getByText(/main has 1 new commit$/)).toBeTruthy()
+    })
+
+    it('does not show behind main when count is 0', () => {
+      render(
+        <SCWorkingView
+          {...defaultProps}
+          branchStatus="pushed"
+          behindMainCount={0}
+        />
+      )
+      expect(screen.queryByText(/new commit/)).toBeNull()
+    })
+
+    it('does not show behind main when fetching', () => {
+      render(
+        <SCWorkingView
+          {...defaultProps}
+          branchStatus="pushed"
+          behindMainCount={3}
+          isFetchingBehindMain={true}
+        />
+      )
+      expect(screen.queryByText(/new commit/)).toBeNull()
+    })
+
+    it('does not show behind main for in-progress branch', () => {
+      render(
+        <SCWorkingView
+          {...defaultProps}
+          branchStatus="in-progress"
+          behindMainCount={3}
+        />
+      )
+      expect(screen.queryByText(/new commit/)).toBeNull()
+    })
+
+    it('shows behind main banner for empty branch status', () => {
+      render(
+        <SCWorkingView
+          {...defaultProps}
+          branchStatus="empty"
+          behindMainCount={2}
+        />
+      )
+      expect(screen.getByText(/main has 2 new commits/)).toBeTruthy()
+    })
+
+    it('calls onSyncWithMain when Get latest button is clicked', () => {
+      const onSyncWithMain = vi.fn()
+      render(
+        <SCWorkingView
+          {...defaultProps}
+          branchStatus="pushed"
+          behindMainCount={3}
+          onSyncWithMain={onSyncWithMain}
+        />
+      )
+      fireEvent.click(screen.getByText('Get latest from main'))
+      expect(onSyncWithMain).toHaveBeenCalled()
+    })
+
+    it('shows Syncing... when syncing with main', () => {
+      render(
+        <SCWorkingView
+          {...defaultProps}
+          branchStatus="pushed"
+          behindMainCount={3}
+          isSyncingWithMain={true}
+        />
+      )
+      expect(screen.getByText('Syncing...')).toBeTruthy()
     })
   })
 })

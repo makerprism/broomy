@@ -96,6 +96,76 @@ describe('sessionCoreActions', () => {
       expect(session.panelVisibility[PANEL_IDS.USER_TERMINAL]).toBe(false)
     })
 
+    it('returns existing session info for active duplicate by directory', async () => {
+      vi.mocked(window.git.isGitRepo).mockResolvedValue(true)
+      vi.mocked(window.git.getBranch).mockResolvedValue('feature/test')
+
+      await useSessionStore.getState().addSession('/test/repo', 'claude')
+      const existingSession = useSessionStore.getState().sessions[0]
+
+      const result = await useSessionStore.getState().addSession('/test/repo', 'claude')
+
+      expect(result).toEqual({
+        existingSessionId: existingSession.id,
+        existingSessionName: existingSession.name,
+        wasArchived: false,
+      })
+      expect(useSessionStore.getState().sessions).toHaveLength(1)
+      expect(useSessionStore.getState().activeSessionId).toBe(existingSession.id)
+    })
+
+    it('returns existing session info for active duplicate by repoId', async () => {
+      vi.mocked(window.git.isGitRepo).mockResolvedValue(true)
+      vi.mocked(window.git.getBranch).mockResolvedValue('feature/test')
+
+      await useSessionStore.getState().addSession('/test/repo', 'claude', { repoId: 'repo-1' })
+      const existingSession = useSessionStore.getState().sessions[0]
+
+      const result = await useSessionStore.getState().addSession('/test/other-worktree', 'claude', { repoId: 'repo-1' })
+
+      expect(result).toEqual({
+        existingSessionId: existingSession.id,
+        existingSessionName: existingSession.name,
+        wasArchived: false,
+      })
+      expect(useSessionStore.getState().sessions).toHaveLength(1)
+    })
+
+    it('allows same branch in different repos', async () => {
+      vi.mocked(window.git.isGitRepo).mockResolvedValue(true)
+      vi.mocked(window.git.getBranch).mockResolvedValue('main')
+
+      await useSessionStore.getState().addSession('/test/repo-a', 'claude', { repoId: 'repo-1' })
+      await useSessionStore.getState().addSession('/test/repo-b', 'claude', { repoId: 'repo-2' })
+
+      expect(useSessionStore.getState().sessions).toHaveLength(2)
+    })
+
+    it('unarchives and returns info for archived duplicate', async () => {
+      vi.mocked(window.git.isGitRepo).mockResolvedValue(true)
+      vi.mocked(window.git.getBranch).mockResolvedValue('feature/test')
+
+      await useSessionStore.getState().addSession('/test/repo', 'claude')
+      const existingSession = useSessionStore.getState().sessions[0]
+
+      // Archive the existing session
+      const sessions = useSessionStore.getState().sessions
+      useSessionStore.setState({
+        sessions: sessions.map((s) => ({ ...s, isArchived: true })),
+      })
+
+      const result = await useSessionStore.getState().addSession('/test/repo', 'claude')
+
+      expect(result).toEqual({
+        existingSessionId: existingSession.id,
+        existingSessionName: existingSession.name,
+        wasArchived: true,
+      })
+      expect(useSessionStore.getState().sessions).toHaveLength(1)
+      expect(useSessionStore.getState().sessions[0].isArchived).toBe(false)
+      expect(useSessionStore.getState().activeSessionId).toBe(existingSession.id)
+    })
+
     it('adds review panel to toolbar for review sessions', async () => {
       vi.mocked(window.git.isGitRepo).mockResolvedValue(true)
 

@@ -56,6 +56,10 @@ function makeData(overrides: Partial<SourceControlData> = {}): SourceControlData
     resetPr: vi.fn(),
     currentRepo: undefined,
     gitStatus: [],
+    behindMainCount: 0,
+    isFetchingBehindMain: false,
+    agentMergeMessage: null,
+    setAgentMergeMessage: vi.fn(),
     ...overrides,
   }
 }
@@ -450,6 +454,88 @@ describe('useSourceControlActions', () => {
     })
   })
 
+  describe('handleCommitMerge', () => {
+    it('commits merge successfully', async () => {
+      vi.mocked(window.git.commitMerge).mockResolvedValue({ success: true })
+      const onGitStatusRefresh = vi.fn()
+      const data = makeData()
+
+      const { result } = renderHook(() =>
+        useSourceControlActions({
+          directory: '/repos/project',
+          onGitStatusRefresh,
+          data,
+        })
+      )
+
+      await act(async () => {
+        await result.current.handleCommitMerge()
+      })
+
+      expect(window.git.commitMerge).toHaveBeenCalledWith('/repos/project')
+      expect(onGitStatusRefresh).toHaveBeenCalled()
+    })
+
+    it('shows error on merge commit failure', async () => {
+      vi.mocked(window.git.commitMerge).mockResolvedValue({ success: false, error: 'merge failed' })
+      const data = makeData()
+
+      const { result } = renderHook(() =>
+        useSourceControlActions({ directory: '/repos/project', data })
+      )
+
+      await act(async () => {
+        await result.current.handleCommitMerge()
+      })
+
+      expect(data.setCommitError).toHaveBeenCalledWith('merge failed')
+      expect(data.setGitOpError).toHaveBeenCalledWith({ operation: 'Merge commit', message: 'merge failed' })
+    })
+
+    it('handles merge commit exception', async () => {
+      vi.mocked(window.git.commitMerge).mockRejectedValue(new Error('network'))
+      const data = makeData()
+
+      const { result } = renderHook(() =>
+        useSourceControlActions({ directory: '/repos/project', data })
+      )
+
+      await act(async () => {
+        await result.current.handleCommitMerge()
+      })
+
+      expect(data.setCommitError).toHaveBeenCalledWith('Error: network')
+    })
+
+    it('does nothing when no directory', async () => {
+      const data = makeData()
+      const { result } = renderHook(() =>
+        useSourceControlActions({ data })
+      )
+
+      await act(async () => {
+        await result.current.handleCommitMerge()
+      })
+
+      expect(window.git.commitMerge).not.toHaveBeenCalled()
+    })
+
+    it('clears agent merge message on commit', async () => {
+      vi.mocked(window.git.commitMerge).mockResolvedValue({ success: true })
+      const data = makeData()
+
+      const { result } = renderHook(() =>
+        useSourceControlActions({ directory: '/repos/project', data })
+      )
+
+      await act(async () => {
+        await result.current.handleCommitMerge()
+      })
+
+      expect(data.setAgentMergeMessage).toHaveBeenCalledWith(null)
+    })
+  })
+
   describe('handleSyncWithMain', () => {
     it('does nothing when no directory', async () => {
       const data = makeData()
@@ -522,10 +608,9 @@ describe('useSourceControlActions', () => {
       })
 
       expect(window.pty.write).toHaveBeenCalledWith('pty-1', 'resolve all merge conflicts\r')
-      expect(data.setGitOpError).toHaveBeenCalledWith({
-        operation: 'Sync with main',
-        message: 'Merge conflicts detected. Agent is resolving them.',
-      })
+      expect(data.setAgentMergeMessage).toHaveBeenCalledWith(
+        'Asked agent to resolve merge conflicts. Wait for the agent to finish, then commit the merge.'
+      )
     })
 
     it('handles merge conflicts without agentPtyId', async () => {

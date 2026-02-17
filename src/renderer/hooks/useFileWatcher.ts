@@ -1,4 +1,5 @@
 import { useEffect, useCallback, useRef, useState } from 'react'
+import { dirname, basename } from 'path-browserify'
 
 interface UseFileWatcherParams {
   filePath: string | null
@@ -13,6 +14,7 @@ interface UseFileWatcherResult {
   fileChangedOnDisk: boolean
   handleKeepLocalChanges: () => void
   handleLoadDiskVersion: () => Promise<void>
+  checkForExternalChanges: () => Promise<boolean>
 }
 
 export function useFileWatcher({
@@ -25,21 +27,31 @@ export function useFileWatcher({
 }: UseFileWatcherParams): UseFileWatcherResult {
   const [fileChangedOnDisk, setFileChangedOnDisk] = useState(false)
   const contentRef = useRef(content)
+  const isDirtyRef = useRef(isDirty)
 
-  // Keep contentRef in sync
+  // Keep refs in sync
   useEffect(() => {
     contentRef.current = content
   }, [content])
 
-  // Watch file for external changes
+  useEffect(() => {
+    isDirtyRef.current = isDirty
+  }, [isDirty])
+
+  // Watch parent directory for external changes (handles atomic writes)
   useEffect(() => {
     if (!filePath) return
 
+    const parentDir = dirname(filePath)
+    const fileName = basename(filePath)
     const watcherId = `fileviewer-${filePath}`
     let debounceTimer: ReturnType<typeof setTimeout> | null = null
 
-    void window.fs.watch(watcherId, filePath)
-    const removeListener = window.fs.onChange(watcherId, () => {
+    void window.fs.watch(watcherId, parentDir)
+    const removeListener = window.fs.onChange(watcherId, (event) => {
+      // Only react to changes for our target file
+      if (event.filename && event.filename !== fileName) return
+
       // Debounce to avoid multiple triggers
       if (debounceTimer) clearTimeout(debounceTimer)
       debounceTimer = setTimeout(() => {
@@ -48,7 +60,7 @@ export function useFileWatcher({
             const newContent = await window.fs.readFile(filePath)
             // Only trigger if content actually changed
             if (newContent !== contentRef.current) {
-              if (isDirty) {
+              if (isDirtyRef.current) {
                 setFileChangedOnDisk(true)
               } else {
                 setContent(newContent)
@@ -67,7 +79,7 @@ export function useFileWatcher({
       removeListener()
       void window.fs.unwatch(watcherId)
     }
-  }, [filePath, isDirty])
+  }, [filePath])
 
   // Reset fileChangedOnDisk when file changes
   useEffect(() => {
@@ -93,5 +105,21 @@ export function useFileWatcher({
     }
   }, [filePath, onDirtyStateChange])
 
-  return { fileChangedOnDisk, handleKeepLocalChanges, handleLoadDiskVersion }
+  // Check if the file has changed on disk since we last loaded it.
+  // Returns true (and shows the banner) if external changes are detected.
+  const checkForExternalChanges = useCallback(async (): Promise<boolean> => {
+    if (!filePath) return false
+    try {
+      const diskContent = await window.fs.readFile(filePath)
+      if (diskContent !== contentRef.current) {
+        setFileChangedOnDisk(true)
+        return true
+      }
+      return false
+    } catch {
+      return false
+    }
+  }, [filePath])
+
+  return { fileChangedOnDisk, handleKeepLocalChanges, handleLoadDiskVersion, checkForExternalChanges }
 }

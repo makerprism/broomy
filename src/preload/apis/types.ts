@@ -18,6 +18,7 @@ export type GitStatusResult = {
   behind: number
   tracking: string | null
   current: string | null
+  isMerging?: boolean
 }
 
 export type SearchResult = {
@@ -83,6 +84,7 @@ export type GitCommitInfo = {
   message: string
   author: string
   date: string
+  pushed?: boolean
 }
 
 export type WorktreeInfo = {

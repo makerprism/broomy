@@ -24,6 +24,8 @@ const defaultProps = {
   onSyncWithMain: vi.fn(),
   gitOpError: null as { operation: string; message: string } | null,
   onDismissError: vi.fn(),
+  agentMergeMessage: null as string | null,
+  onDismissAgentMerge: vi.fn(),
 }
 
 describe('SCPrBanner', () => {
@@ -131,5 +133,34 @@ describe('SCPrBanner', () => {
     // showErrorDetail should have been called on the error store
     // The button exists and is clickable without throwing
     expect(errorBtn).toBeTruthy()
+  })
+
+  it('shows agent merge info banner when agentMergeMessage is set', () => {
+    render(
+      <SCPrBanner
+        {...defaultProps}
+        agentMergeMessage="Asked agent to resolve merge conflicts. Wait for the agent to finish, then commit the merge."
+      />
+    )
+    expect(screen.getByText(/Asked agent to resolve merge conflicts/)).toBeTruthy()
+  })
+
+  it('calls onDismissAgentMerge when dismiss button is clicked', () => {
+    const onDismissAgentMerge = vi.fn()
+    render(
+      <SCPrBanner
+        {...defaultProps}
+        agentMergeMessage="Agent is resolving conflicts."
+        onDismissAgentMerge={onDismissAgentMerge}
+      />
+    )
+    const dismissBtns = screen.getAllByTitle('Dismiss')
+    fireEvent.click(dismissBtns[0])
+    expect(onDismissAgentMerge).toHaveBeenCalled()
+  })
+
+  it('does not show agent merge banner when message is null', () => {
+    render(<SCPrBanner {...defaultProps} agentMergeMessage={null} />)
+    expect(screen.queryByText(/resolve merge conflicts/)).toBeNull()
   })
 })

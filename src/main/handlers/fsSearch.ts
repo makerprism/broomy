@@ -9,7 +9,7 @@ export function register(ipcMain: IpcMain, ctx: HandlerContext): void {
       return []
     }
 
-    const workerPath = join(__dirname, '../workers/fsSearch.worker.js')
+    const workerPath = join(__dirname, 'workers/fsSearch.worker.js')
     return runInWorker(workerPath, { dirPath, query })
   })
 }

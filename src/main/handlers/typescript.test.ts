@@ -83,6 +83,9 @@ describe('typescript handlers', () => {
       const handlers = setupHandlers()
       const result = await handlers['ts:getProjectContext']({}, '/project')
       expect(result).toEqual(mockResult)
+      const workerPath = vi.mocked(runInWorker).mock.calls[0][0]
+      expect(workerPath).toContain('tsProject.worker.js')
+      expect(workerPath).not.toContain('../workers')
       expect(runInWorker).toHaveBeenCalledWith(
         expect.stringContaining('tsProject.worker.js'),
         { projectRoot: '/project' },

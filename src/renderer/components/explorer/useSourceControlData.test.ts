@@ -383,6 +383,67 @@ describe('useSourceControlData', () => {
     expect(window.git.branchCommits).not.toHaveBeenCalled()
   })
 
+  it('returns initial behind-main state', () => {
+    const { result } = renderHook(() => useSourceControlData(defaultProps))
+    expect(result.current.behindMainCount).toBe(0)
+    expect(result.current.isFetchingBehindMain).toBe(false)
+    expect(result.current.agentMergeMessage).toBeNull()
+  })
+
+  it('fetches behind-main count when pushed with no changes', async () => {
+    vi.mocked(window.git.isBehindMain).mockResolvedValue({ behind: 5, defaultBranch: 'main' })
+
+    const { result } = renderHook(() =>
+      useSourceControlData({ ...defaultProps, branchStatus: 'pushed', gitStatus: [] })
+    )
+
+    await act(async () => {
+      await new Promise(r => setTimeout(r, 10))
+    })
+
+    expect(result.current.behindMainCount).toBe(5)
+  })
+
+  it('does not fetch behind-main when branch is in-progress', async () => {
+    const { result } = renderHook(() =>
+      useSourceControlData({ ...defaultProps, branchStatus: 'in-progress', gitStatus: [] })
+    )
+
+    await act(async () => {
+      await new Promise(r => setTimeout(r, 10))
+    })
+
+    expect(window.git.isBehindMain).not.toHaveBeenCalled()
+    expect(result.current.behindMainCount).toBe(0)
+  })
+
+  it('does not fetch behind-main when there are changes', async () => {
+    const gitStatus = [{ path: 'file.ts', status: 'modified' as const, staged: false, indexStatus: ' ', workingDirStatus: 'M' }]
+    renderHook(() =>
+      useSourceControlData({ ...defaultProps, branchStatus: 'pushed', gitStatus })
+    )
+
+    await act(async () => {
+      await new Promise(r => setTimeout(r, 10))
+    })
+
+    expect(window.git.isBehindMain).not.toHaveBeenCalled()
+  })
+
+  it('handles behind-main fetch error gracefully', async () => {
+    vi.mocked(window.git.isBehindMain).mockRejectedValue(new Error('network'))
+
+    const { result } = renderHook(() =>
+      useSourceControlData({ ...defaultProps, branchStatus: 'pushed', gitStatus: [] })
+    )
+
+    await act(async () => {
+      await new Promise(r => setTimeout(r, 10))
+    })
+
+    expect(result.current.behindMainCount).toBe(0)
+  })
+
   it('skips PR fetch when no directory', async () => {
     renderHook(() =>
       useSourceControlData({ ...defaultProps, directory: undefined })

@@ -15,6 +15,8 @@ interface SCPrBannerProps {
   onSyncWithMain: () => void
   gitOpError: { operation: string; message: string } | null
   onDismissError: () => void
+  agentMergeMessage: string | null
+  onDismissAgentMerge: () => void
 }
 
 export function SCPrBanner({
@@ -28,6 +30,8 @@ export function SCPrBanner({
   onSyncWithMain,
   gitOpError,
   onDismissError,
+  agentMergeMessage,
+  onDismissAgentMerge,
 }: SCPrBannerProps) {
   const { showErrorDetail } = useErrorStore()
   return (
@@ -72,6 +76,22 @@ export function SCPrBanner({
           </div>
         ) : null}
       </div>
+
+      {/* Agent merge info banner */}
+      {agentMergeMessage && (
+        <div className="px-3 py-2 border-b border-blue-500/30 bg-blue-500/10 flex items-center gap-2">
+          <span className="flex-1 text-xs text-blue-400">
+            {agentMergeMessage}
+          </span>
+          <button
+            onClick={onDismissAgentMerge}
+            className="text-blue-400 hover:text-blue-300 text-xs shrink-0 px-1"
+            title="Dismiss"
+          >
+            &times;
+          </button>
+        </div>
+      )}
 
       {/* Git operation error banner */}
       {gitOpError && (

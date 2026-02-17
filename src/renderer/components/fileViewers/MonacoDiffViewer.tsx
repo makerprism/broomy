@@ -116,6 +116,8 @@ export default function MonacoDiffViewer({
           modified={modifiedContent}
           theme="vs-dark"
           onMount={handleDiffEditorMount}
+          keepCurrentOriginalModel={true}
+          keepCurrentModifiedModel={true}
           options={{
             readOnly: true,
             renderSideBySide: sideBySide,

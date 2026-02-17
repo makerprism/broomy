@@ -4,7 +4,7 @@ import { renderHook, act } from '@testing-library/react'
 import { useFileWatcher } from './useFileWatcher'
 
 describe('useFileWatcher', () => {
-  let onChangeCallback: (() => void) | null = null
+  let onChangeCallback: ((filename?: string) => void) | null = null
   const mockRemoveListener = vi.fn()
 
   beforeEach(() => {
@@ -14,7 +14,7 @@ describe('useFileWatcher', () => {
 
     // Capture the onChange callback when registered
     vi.mocked(window.fs.onChange).mockImplementation((_watcherId, callback) => {
-      onChangeCallback = () => callback({ eventType: 'change', filename: 'file.ts' })
+      onChangeCallback = (filename?: string) => callback({ eventType: 'change', filename: filename ?? 'file.ts' })
       return mockRemoveListener
     })
     vi.mocked(window.fs.watch).mockResolvedValue({ success: true })
@@ -36,10 +36,10 @@ describe('useFileWatcher', () => {
   }
 
   describe('watcher setup', () => {
-    it('sets up file watcher on mount', () => {
+    it('watches parent directory instead of file path', () => {
       renderHook(() => useFileWatcher(defaultParams))
 
-      expect(window.fs.watch).toHaveBeenCalledWith('fileviewer-/test/file.ts', '/test/file.ts')
+      expect(window.fs.watch).toHaveBeenCalledWith('fileviewer-/test/file.ts', '/test')
       expect(window.fs.onChange).toHaveBeenCalledWith('fileviewer-/test/file.ts', expect.any(Function))
     })
 
@@ -57,6 +57,38 @@ describe('useFileWatcher', () => {
 
       expect(mockRemoveListener).toHaveBeenCalled()
       expect(window.fs.unwatch).toHaveBeenCalledWith('fileviewer-/test/file.ts')
+    })
+
+    it('does not recreate watcher when isDirty changes', () => {
+      const { rerender } = renderHook(
+        ({ isDirty }) => useFileWatcher({ ...defaultParams, isDirty }),
+        { initialProps: { isDirty: false } }
+      )
+
+      vi.mocked(window.fs.watch).mockClear()
+      vi.mocked(window.fs.onChange).mockClear()
+
+      rerender({ isDirty: true })
+
+      // Watcher should NOT be re-created when isDirty changes
+      expect(window.fs.watch).not.toHaveBeenCalled()
+    })
+
+    it('ignores changes for other files in the same directory', async () => {
+      const setContent = vi.fn()
+      renderHook(() => useFileWatcher({ ...defaultParams, setContent }))
+
+      vi.mocked(window.fs.readFile).mockResolvedValue('new content')
+
+      // Trigger change for a different file in the same directory
+      onChangeCallback!('other-file.ts')
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(300)
+      })
+
+      expect(window.fs.readFile).not.toHaveBeenCalled()
+      expect(setContent).not.toHaveBeenCalled()
     })
 
     it('resets fileChangedOnDisk when filePath changes', () => {
@@ -92,9 +124,13 @@ describe('useFileWatcher', () => {
     })
 
     it('sets fileChangedOnDisk when dirty and file changes', async () => {
-      const { result } = renderHook(() =>
-        useFileWatcher({ ...defaultParams, isDirty: true })
+      const { result, rerender } = renderHook(
+        ({ isDirty }) => useFileWatcher({ ...defaultParams, isDirty }),
+        { initialProps: { isDirty: false } }
       )
+
+      // Switch to dirty (uses ref, so no watcher re-creation)
+      rerender({ isDirty: true })
 
       vi.mocked(window.fs.readFile).mockResolvedValue('different content')
 
@@ -234,6 +270,62 @@ describe('useFileWatcher', () => {
 
       // Should clear fileChangedOnDisk even on error
       expect(result.current.fileChangedOnDisk).toBe(false)
+    })
+  })
+
+  describe('checkForExternalChanges', () => {
+    it('returns false when file content matches', async () => {
+      vi.mocked(window.fs.readFile).mockResolvedValue('original content')
+
+      const { result } = renderHook(() => useFileWatcher(defaultParams))
+
+      let changed: boolean | undefined
+      await act(async () => {
+        changed = await result.current.checkForExternalChanges()
+      })
+
+      expect(changed).toBe(false)
+      expect(result.current.fileChangedOnDisk).toBe(false)
+    })
+
+    it('returns true and sets banner when file content differs', async () => {
+      const { result } = renderHook(() => useFileWatcher(defaultParams))
+
+      vi.mocked(window.fs.readFile).mockResolvedValue('externally modified content')
+
+      let changed: boolean | undefined
+      await act(async () => {
+        changed = await result.current.checkForExternalChanges()
+      })
+
+      expect(changed).toBe(true)
+      expect(result.current.fileChangedOnDisk).toBe(true)
+    })
+
+    it('returns false when filePath is null', async () => {
+      const { result } = renderHook(() =>
+        useFileWatcher({ ...defaultParams, filePath: null })
+      )
+
+      let changed: boolean | undefined
+      await act(async () => {
+        changed = await result.current.checkForExternalChanges()
+      })
+
+      expect(changed).toBe(false)
+    })
+
+    it('returns false on read errors', async () => {
+      vi.mocked(window.fs.readFile).mockRejectedValue(new Error('read fail'))
+
+      const { result } = renderHook(() => useFileWatcher(defaultParams))
+
+      let changed: boolean | undefined
+      await act(async () => {
+        changed = await result.current.checkForExternalChanges()
+      })
+
+      expect(changed).toBe(false)
     })
   })
 })

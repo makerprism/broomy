@@ -37,6 +37,7 @@ vi.mock('./useFileWatcher', () => ({
     fileChangedOnDisk: false,
     handleKeepLocalChanges: vi.fn(),
     handleLoadDiskVersion: vi.fn(),
+    checkForExternalChanges: vi.fn().mockResolvedValue(false),
   }),
 }))
 
@@ -67,6 +68,7 @@ describe('useFileViewer', () => {
       fileChangedOnDisk: false,
       handleKeepLocalChanges: vi.fn(),
       handleLoadDiskVersion: vi.fn(),
+      checkForExternalChanges: vi.fn().mockResolvedValue(false),
     })
   })
 
@@ -187,6 +189,44 @@ describe('useFileViewer', () => {
       })).rejects.toThrow('write failed')
 
       expect(result.current.isSaving).toBe(false)
+    })
+
+    it('aborts save when file has external changes', async () => {
+      const checkForExternalChanges = vi.fn().mockResolvedValue(true)
+      vi.mocked(useFileWatcher).mockReturnValue({
+        fileChangedOnDisk: false,
+        handleKeepLocalChanges: vi.fn(),
+        handleLoadDiskVersion: vi.fn(),
+        checkForExternalChanges,
+      })
+
+      const { result } = renderHook(() =>
+        useFileViewer({ filePath: '/test/file.ts' })
+      )
+
+      let saveResult: boolean | undefined
+      await act(async () => {
+        saveResult = await result.current.handleSave('new content')
+      })
+
+      expect(saveResult).toBe(false)
+      expect(window.fs.writeFile).not.toHaveBeenCalled()
+    })
+
+    it('proceeds with save when no external changes', async () => {
+      vi.mocked(window.fs.writeFile).mockResolvedValue({ success: true })
+
+      const { result } = renderHook(() =>
+        useFileViewer({ filePath: '/test/file.ts' })
+      )
+
+      let saveResult: boolean | undefined
+      await act(async () => {
+        saveResult = await result.current.handleSave('new content')
+      })
+
+      expect(saveResult).toBe(true)
+      expect(window.fs.writeFile).toHaveBeenCalledWith('/test/file.ts', 'new content')
     })
   })
 

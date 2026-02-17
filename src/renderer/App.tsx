@@ -60,6 +60,31 @@ function UnsavedChangesDialog({ onCancel, onDiscard, onSave }: {
   )
 }
 
+function DuplicateSessionModal({ info, onDismiss }: {
+  info: { name: string; wasArchived: boolean }; onDismiss: () => void
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <div className="bg-bg-secondary border border-border rounded-lg shadow-xl p-4 max-w-sm mx-4">
+        <p className="text-sm text-text-primary mb-4">
+          {info.wasArchived
+            ? <>Restored archived session <span className="font-medium">{info.name}</span></>
+            : <>Switched to existing session <span className="font-medium">{info.name}</span></>
+          }
+        </p>
+        <div className="flex justify-end">
+          <button
+            onClick={onDismiss}
+            className="px-3 py-1.5 text-xs rounded bg-accent text-white hover:bg-accent/80 transition-colors"
+          >
+            OK
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function GitMissingBanner() {
   const { gitAvailable } = useRepoStore()
   if (gitAvailable !== false) return null
@@ -114,6 +139,7 @@ function AppContent() {
 
   const [showNewSessionDialog, setShowNewSessionDialog] = useState(false)
   const [showPanelPicker, setShowPanelPicker] = useState(false)
+  const [duplicateSessionInfo, setDuplicateSessionInfo] = useState<{ name: string; wasArchived: boolean } | null>(null)
 
   // Git polling hook
   const {
@@ -198,6 +224,7 @@ function AppContent() {
     setFileViewerPosition,
     updatePrState,
     setShowNewSessionDialog,
+    onSessionAlreadyExists: setDuplicateSessionInfo,
   })
 
   const handleSearchFiles = useCallback(() => {
@@ -284,6 +311,11 @@ function AppContent() {
       {/* Shortcuts Modal */}
       {showShortcutsModal && (
         <ShortcutsModal onClose={() => setShowShortcutsModal(false)} />
+      )}
+
+      {/* Duplicate Session Info Modal */}
+      {duplicateSessionInfo && (
+        <DuplicateSessionModal info={duplicateSessionInfo} onDismiss={() => setDuplicateSessionInfo(null)} />
       )}
     </>
   )

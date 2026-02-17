@@ -16,7 +16,7 @@ export function register(ipcMain: IpcMain, ctx: HandlerContext): void {
       }
     }
 
-    const workerPath = join(__dirname, '../workers/tsProject.worker.js')
+    const workerPath = join(__dirname, 'workers/tsProject.worker.js')
     return runInWorker(workerPath, { projectRoot })
   })
 }

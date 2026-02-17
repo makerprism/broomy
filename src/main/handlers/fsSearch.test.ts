@@ -61,6 +61,9 @@ describe('fsSearch handler', () => {
     const handlers = setupHandlers()
     const result = await handlers['fs:search'](null, '/project', 'search')
     expect(result).toEqual(mockResults)
+    const workerPath = vi.mocked(runInWorker).mock.calls[0][0]
+    expect(workerPath).toContain('fsSearch.worker.js')
+    expect(workerPath).not.toContain('../workers')
     expect(runInWorker).toHaveBeenCalledWith(
       expect.stringContaining('fsSearch.worker.js'),
       { dirPath: '/project', query: 'search' },

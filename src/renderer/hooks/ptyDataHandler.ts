@@ -43,6 +43,30 @@ export function createPtyDataHandler(args: CreatePtyDataHandlerArgs): PtyDataHan
   let lastWriteViewportY = -1
   let writeJumpCount = 0
   let syncCheckTimeout: ReturnType<typeof setTimeout> | null = null
+  // Debounce scrollToBottom across rapid write chunks using rAF.
+  // PTY data arrives in fixed-size chunks (~1024 bytes), so a single
+  // logical output (e.g. a screen redraw) is split across multiple
+  // onData callbacks. Calling scrollToBottom() on each partial chunk
+  // causes visible oscillation because xterm's cursor is at an
+  // intermediate position mid-redraw. By deferring to rAF, we scroll
+  // once after all pending chunks have been processed.
+  let scrollToBottomRAF = 0
+
+  const scheduleScrollToBottom = () => {
+    if (scrollToBottomRAF) return // already scheduled
+    scrollToBottomRAF = requestAnimationFrame(() => {
+      scrollToBottomRAF = 0
+      if (!state.isFollowingRef.current) return
+      terminal.scrollToBottom()
+      // If still not at bottom (DOM desync), try once more next frame
+      if (!helpers.isAtBottom()) {
+        scrollToBottomRAF = requestAnimationFrame(() => {
+          scrollToBottomRAF = 0
+          if (state.isFollowingRef.current) terminal.scrollToBottom()
+        })
+      }
+    })
+  }
 
   const handleData = (data: string) => {
     const preWriteViewportY = terminal.buffer.active.viewportY
@@ -53,10 +77,23 @@ export function createPtyDataHandler(args: CreatePtyDataHandlerArgs): PtyDataHan
     const hasCursorMove = hasCursorUp || /\r(?!\n)/.test(data) || /\x1b\[\d*G/.test(data)
     const hasEraseInLine = /\x1b\[\d*K/.test(data)
 
+    // Detect screen clear sequences: \x1b[2J (erase display) + \x1b[3J (erase scrollback)
+    const hasScreenClear = data.includes('\x1b[2J') || data.includes('\x1b[3J')
+
     terminal.write(data, () => {
       const postViewportY = terminal.buffer.active.viewportY
       const postBaseY = terminal.buffer.active.baseY
       const postScrollTop = viewportEl?.scrollTop ?? 0
+
+      // After a screen/scrollback clear, the DOM scrollTop may be stale
+      // (still at the old position while the buffer was wiped). Reset it.
+      if (hasScreenClear && viewportEl) {
+        const expectedMaxScroll = viewportEl.scrollHeight - viewportEl.clientHeight
+        if (viewportEl.scrollTop > expectedMaxScroll) {
+          viewportEl.scrollTop = expectedMaxScroll
+        }
+        helpers.forceViewportSync()
+      }
 
       if (lastWriteViewportY >= 0) {
         const viewportDelta = Math.abs(postViewportY - lastWriteViewportY)
@@ -67,7 +104,7 @@ export function createPtyDataHandler(args: CreatePtyDataHandlerArgs): PtyDataHan
               pre: { viewportY: preWriteViewportY, baseY: preWriteBaseY, scrollTop: preWriteScrollTop },
               post: { viewportY: postViewportY, baseY: postBaseY, scrollTop: postScrollTop },
               viewportDelta,
-              hasCursorUp, hasCursorMove, hasEraseInLine,
+              hasCursorUp, hasCursorMove, hasEraseInLine, hasScreenClear,
               dataLen: data.length,
               dataSample: data.length > 200 ? `${data.slice(0, 100)}...${data.slice(-100)}` : data,
               isFollowing: state.isFollowingRef.current,
@@ -77,33 +114,19 @@ export function createPtyDataHandler(args: CreatePtyDataHandlerArgs): PtyDataHan
       }
       lastWriteViewportY = postViewportY
 
+      // Debounce scrollToBottom — don't scroll on every partial chunk
       if (state.isFollowingRef.current) {
-        const preScrollBottom = viewportEl?.scrollTop ?? 0
-        terminal.scrollToBottom()
-        const postScrollBottom = viewportEl?.scrollTop ?? 0
-        if (Math.abs(postScrollBottom - preScrollBottom) > 50) {
-          console.log(`[scroll-diag] scrollToBottom jump`, JSON.stringify({
-            scrollTopBefore: preScrollBottom,
-            scrollTopAfter: postScrollBottom,
-            delta: postScrollBottom - preScrollBottom,
-            viewportY: terminal.buffer.active.viewportY,
-            baseY: terminal.buffer.active.baseY,
-            hasCursorUp, hasCursorMove,
-          }))
-        }
-        if (!helpers.isAtBottom()) {
-          scrollTracking.logScrollDiag?.('scrollToBottom not at bottom after write, scheduling rAF retry')
-          scrollTracking.state.pendingScrollRAF = requestAnimationFrame(() => {
-            scrollTracking.state.pendingScrollRAF = 0
-            if (state.isFollowingRef.current) terminal.scrollToBottom()
-          })
-        }
+        scheduleScrollToBottom()
       }
     })
 
     if (!syncCheckTimeout) {
       syncCheckTimeout = setTimeout(() => {
         syncCheckTimeout = null
+        // Skip sync checks when the terminal is not visible (zero dimensions).
+        // Running forceViewportSync on invisible terminals causes bogus resize
+        // toggles that can corrupt state when the terminal becomes visible.
+        if (viewportEl?.clientHeight === 0) return
         if (helpers.isViewportDesynced() || helpers.isScrollStuck(1) || helpers.isScrollStuck(-1)) {
           scrollTracking.logScrollDiag?.('sync check: forcing viewport sync', {
             desynced: helpers.isViewportDesynced(),
@@ -143,6 +166,10 @@ export function createPtyDataHandler(args: CreatePtyDataHandlerArgs): PtyDataHan
     if (syncCheckTimeout) {
       clearTimeout(syncCheckTimeout)
       syncCheckTimeout = null
+    }
+    if (scrollToBottomRAF) {
+      cancelAnimationFrame(scrollToBottomRAF)
+      scrollToBottomRAF = 0
     }
   }
 

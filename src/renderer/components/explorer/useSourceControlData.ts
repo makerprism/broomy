@@ -1,13 +1,14 @@
 import { useState, useEffect, useMemo } from 'react'
 import type { PrComment } from './types'
 import type { GitFileStatus, GitStatusResult, GitHubPrStatus, GitCommitInfo } from '../../../preload/index'
-import type { PrState } from '../../store/sessions'
+import type { BranchStatus, PrState } from '../../store/sessions'
 import { useRepoStore } from '../../store/repos'
 
 export interface SourceControlDataProps {
   directory?: string
   gitStatus: GitFileStatus[]
   syncStatus?: GitStatusResult | null
+  branchStatus?: BranchStatus
   onUpdatePrState?: (prState: PrState, prNumber?: number, prUrl?: string) => void
   pushedToMainAt?: number
   pushedToMainCommit?: string
@@ -139,6 +140,7 @@ export function useSourceControlData({
   directory,
   gitStatus,
   syncStatus,
+  branchStatus,
   onUpdatePrState,
   pushedToMainAt,
   pushedToMainCommit,
@@ -166,6 +168,13 @@ export function useSourceControlData({
   const [commitFilesByHash, setCommitFilesByHash] = useState<Record<string, { path: string; status: string }[] | undefined>>({})
   const [loadingCommitFiles, setLoadingCommitFiles] = useState<Set<string>>(new Set())
 
+  // Behind-main state
+  const [behindMainCount, setBehindMainCount] = useState(0)
+  const [isFetchingBehindMain, setIsFetchingBehindMain] = useState(false)
+
+  // Agent merge message (shown as info banner instead of error)
+  const [agentMergeMessage, setAgentMergeMessage] = useState<string | null>(null)
+
   // PR effects
   const pr = usePrEffects({ directory, syncStatus, scView, onUpdatePrState, pushedToMainAt, pushedToMainCommit, onClearPushToMain })
 
@@ -182,11 +191,40 @@ export function useSourceControlData({
     pr.resetPr()
     setCommitError(null)
     setGitOpError(null)
+    setAgentMergeMessage(null)
+    setBehindMainCount(0)
     setBranchCommits([])
     setExpandedCommits(new Set())
     setCommitFilesByHash({})
     setLoadingCommitFiles(new Set())
   }, [directory])
+
+  // Check if main has new commits when branch is pushed/empty with no changes
+  useEffect(() => {
+    if (scView !== 'working' || !directory || gitStatus.length > 0) {
+      setBehindMainCount(0)
+      return
+    }
+    if (branchStatus !== 'pushed' && branchStatus !== 'empty') {
+      setBehindMainCount(0)
+      return
+    }
+
+    let cancelled = false
+    setIsFetchingBehindMain(true)
+
+    window.git.isBehindMain(directory).then((result: { behind: number; defaultBranch: string }) => {
+      if (cancelled) return
+      setBehindMainCount(result.behind)
+      setIsFetchingBehindMain(false)
+    }).catch(() => {
+      if (cancelled) return
+      setBehindMainCount(0)
+      setIsFetchingBehindMain(false)
+    })
+
+    return () => { cancelled = true }
+  }, [scView, directory, gitStatus.length, branchStatus])
 
   // Fetch branch changes when branch view is active
   useEffect(() => {
@@ -250,6 +288,11 @@ export function useSourceControlData({
     expandedCommits, setExpandedCommits,
     commitFilesByHash, setCommitFilesByHash,
     loadingCommitFiles, setLoadingCommitFiles,
+    // Behind-main state
+    behindMainCount,
+    isFetchingBehindMain,
+    // Agent merge message
+    agentMergeMessage, setAgentMergeMessage,
     // PR state (spread from sub-hook)
     ...pr,
     currentRepo,

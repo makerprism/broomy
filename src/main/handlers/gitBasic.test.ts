@@ -76,6 +76,8 @@ function setupHandlers(ctx?: HandlerContext) {
 describe('gitBasic handlers', () => {
   beforeEach(() => {
     vi.resetAllMocks()
+    // Default mock for raw: resolves to empty string (used by status for MERGE_HEAD check, show, etc.)
+    mockGitInstance.raw.mockResolvedValue('')
   })
 
   describe('registration', () => {
@@ -89,6 +91,7 @@ describe('gitBasic handlers', () => {
       expect(handlers['git:unstage']).toBeDefined()
       expect(handlers['git:checkoutFile']).toBeDefined()
       expect(handlers['git:commit']).toBeDefined()
+      expect(handlers['git:commitMerge']).toBeDefined()
       expect(handlers['git:push']).toBeDefined()
       expect(handlers['git:pull']).toBeDefined()
       expect(handlers['git:diff']).toBeDefined()
@@ -202,6 +205,44 @@ describe('gitBasic handlers', () => {
       expect(result.files).toHaveLength(1)
       expect(result.files[0].status).toBe('modified')
       expect(result.files[0].staged).toBe(false)
+    })
+
+    it('detects isMerging when MERGE_HEAD exists', async () => {
+      mockGitInstance.status.mockResolvedValue({
+        files: [],
+        ahead: 0,
+        behind: 0,
+        tracking: null,
+        current: 'feature',
+      })
+      mockGitInstance.raw.mockImplementation((args: string[]) => {
+        if (args[0] === 'rev-parse' && args[2] === 'MERGE_HEAD') {
+          return Promise.resolve('abc123')
+        }
+        return Promise.resolve('')
+      })
+      const handlers = setupHandlers()
+      const result = await handlers['git:status'](null, '/repo')
+      expect(result.isMerging).toBe(true)
+    })
+
+    it('returns isMerging false when not merging', async () => {
+      mockGitInstance.status.mockResolvedValue({
+        files: [],
+        ahead: 0,
+        behind: 0,
+        tracking: null,
+        current: 'feature',
+      })
+      mockGitInstance.raw.mockImplementation((args: string[]) => {
+        if (args[0] === 'rev-parse' && args[2] === 'MERGE_HEAD') {
+          return Promise.reject(new Error('not a merge'))
+        }
+        return Promise.resolve('')
+      })
+      const handlers = setupHandlers()
+      const result = await handlers['git:status'](null, '/repo')
+      expect(result.isMerging).toBe(false)
     })
 
     it('returns empty status on error', async () => {
@@ -330,6 +371,29 @@ describe('gitBasic handlers', () => {
       const handlers = setupHandlers()
       const result = await handlers['git:commit'](null, '/repo', 'msg')
       expect(result).toEqual({ success: false, error: expect.stringContaining('nothing to commit') })
+    })
+  })
+
+  describe('git:commitMerge', () => {
+    it('returns success in E2E mode', async () => {
+      const handlers = setupHandlers(createMockCtx({ isE2ETest: true }))
+      const result = await handlers['git:commitMerge'](null, '/repo')
+      expect(result).toEqual({ success: true })
+    })
+
+    it('commits merge with --no-edit in normal mode', async () => {
+      mockGitInstance.raw.mockResolvedValue('')
+      const handlers = setupHandlers()
+      const result = await handlers['git:commitMerge'](null, '/repo')
+      expect(result).toEqual({ success: true })
+      expect(mockGitInstance.raw).toHaveBeenCalledWith(['commit', '--no-edit'])
+    })
+
+    it('returns error on merge commit failure', async () => {
+      mockGitInstance.raw.mockRejectedValue(new Error('merge commit failed'))
+      const handlers = setupHandlers()
+      const result = await handlers['git:commitMerge'](null, '/repo')
+      expect(result).toEqual({ success: false, error: expect.stringContaining('merge commit failed') })
     })
   })
 

@@ -221,9 +221,13 @@ function MonacoViewerComponent({ filePath, content, onSave, onDirtyChange, scrol
     editor.addCommand(monacoInstance.KeyMod.CtrlCmd | monacoInstance.KeyCode.KeyS, () => {
       const editorContent = editor.getValue()
       if (onSave && editorContent !== originalContentRef.current) {
-        void onSave(editorContent).then(() => {
-          originalContentRef.current = editorContent
-          onDirtyChange?.(false, editorContent)
+        void onSave(editorContent).then((saved) => {
+          // Only reset dirty state if the save actually went through
+          // (it may be aborted if the file changed on disk)
+          if (saved) {
+            originalContentRef.current = editorContent
+            onDirtyChange?.(false, editorContent)
+          }
         })
       }
     })

@@ -18,6 +18,7 @@ function createGitActions(
   const {
     setIsSyncing, setIsSyncingWithMain, setGitOpError,
     branchBaseName, setIsPushingToMain, gitStatus,
+    setAgentMergeMessage,
   } = data
 
   const handleSync = async () => {
@@ -53,6 +54,7 @@ function createGitActions(
 
     setIsSyncingWithMain(true)
     setGitOpError(null)
+    setAgentMergeMessage(null)
     try {
       const result = await window.git.pullOriginMain(directory)
       if (result.success) {
@@ -60,7 +62,7 @@ function createGitActions(
       } else if (result.hasConflicts) {
         if (agentPtyId) {
           await window.pty.write(agentPtyId, 'resolve all merge conflicts\r')
-          setGitOpError({ operation: 'Sync with main', message: 'Merge conflicts detected. Agent is resolving them.' })
+          setAgentMergeMessage('Asked agent to resolve merge conflicts. Wait for the agent to finish, then commit the merge.')
         } else {
           setGitOpError({ operation: 'Sync with main', message: 'Merge conflicts detected. Resolve them manually.' })
         }
@@ -150,7 +152,7 @@ export function useSourceControlActions({
     stagedFiles, unstagedFiles,
     commitMessage, setCommitMessage,
     setIsCommitting, setCommitError, setCommitErrorExpanded,
-    setGitOpError,
+    setGitOpError, setAgentMergeMessage,
     expandedCommits, setExpandedCommits,
     commitFilesByHash, setCommitFilesByHash,
     setLoadingCommitFiles,
@@ -159,6 +161,30 @@ export function useSourceControlActions({
   } = data
 
   const gitActions = createGitActions(directory, onGitStatusRefresh, agentPtyId, onRecordPushToMain, data)
+
+  const handleCommitMerge = async () => {
+    if (!directory) return
+    setIsCommitting(true)
+    setCommitError(null)
+    setGitOpError(null)
+    setAgentMergeMessage(null)
+    try {
+      const result = await window.git.commitMerge(directory)
+      if (result.success) {
+        onGitStatusRefresh?.()
+      } else {
+        const errorMsg = result.error || 'Merge commit failed'
+        setCommitError(errorMsg)
+        setGitOpError({ operation: 'Merge commit', message: errorMsg })
+      }
+    } catch (err) {
+      const errorMsg = String(err)
+      setCommitError(errorMsg)
+      setGitOpError({ operation: 'Merge commit', message: errorMsg })
+    } finally {
+      setIsCommitting(false)
+    }
+  }
 
   const handleRevertFile = async (filePath: string) => {
     if (!directory) return
@@ -289,6 +315,7 @@ export function useSourceControlActions({
     handleStageAll,
     handleUnstage,
     handleCommit,
+    handleCommitMerge,
     handleToggleCommit,
     handleReplyToComment,
     ...gitActions,
