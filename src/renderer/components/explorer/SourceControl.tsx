@@ -52,7 +52,7 @@ export function SourceControl({
   }, [directory])
 
   const data = useSourceControlData({
-    directory, gitStatus, syncStatus, onUpdatePrState,
+    directory, gitStatus, syncStatus, branchStatus, onUpdatePrState,
     pushedToMainAt, pushedToMainCommit, onClearPushToMain,
     repoId, scView,
   })
@@ -79,7 +79,8 @@ export function SourceControl({
       onSyncWithMain={actions.handleSyncWithMain}
       gitOpError={data.gitOpError}
       onDismissError={() => data.setGitOpError(null)}
-      onFileSelect={onFileSelect}
+      agentMergeMessage={data.agentMergeMessage}
+      onDismissAgentMerge={() => data.setAgentMergeMessage(null)}
     />
   )
 
@@ -155,18 +156,31 @@ export function SourceControl({
         commitMessage={data.commitMessage}
         setCommitMessage={data.setCommitMessage}
         isCommitting={data.isCommitting}
+        isMerging={syncStatus?.isMerging ?? false}
         commitError={data.commitError}
         commitErrorExpanded={data.commitErrorExpanded}
         setCommitErrorExpanded={data.setCommitErrorExpanded}
         setCommitError={data.setCommitError}
         isSyncing={data.isSyncing}
         onCommit={actions.handleCommit}
+        onCommitMerge={actions.handleCommitMerge}
         onSync={actions.handleSync}
+        onSyncWithMain={actions.handleSyncWithMain}
+        onPushNewBranch={actions.handlePushNewBranch}
         onStage={actions.handleStage}
         onStageAll={actions.handleStageAll}
         onUnstage={actions.handleUnstage}
         onFileSelect={onFileSelect}
         onOpenReview={onOpenReview}
+        prStatus={data.prStatus}
+        hasWriteAccess={data.hasWriteAccess}
+        isPushingToMain={data.isPushingToMain}
+        allowPushToMain={data.currentRepo?.allowPushToMain ?? true}
+        onCreatePr={actions.handleCreatePr}
+        onPushToMain={actions.handlePushToMain}
+        behindMainCount={data.behindMainCount}
+        isFetchingBehindMain={data.isFetchingBehindMain}
+        isSyncingWithMain={data.isSyncingWithMain}
       />
     </div>
   )

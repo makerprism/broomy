@@ -184,9 +184,7 @@ export default function TabbedTerminal({ sessionId, cwd, isActive }: TabbedTermi
     setDraggedTabId(null)
   }, [sessionId, draggedTabId, tabs, reorderTerminalTabs])
 
-  const handleDropdownSelect = useCallback((tabId: string) => {
-    setActiveTerminalTab(sessionId, tabId); setShowDropdown(false)
-  }, [sessionId, setActiveTerminalTab])
+  const handleDropdownSelect = useCallback((tabId: string) => { setActiveTerminalTab(sessionId, tabId); setShowDropdown(false) }, [sessionId, setActiveTerminalTab])
 
   // Double-click to rename
   const handleDoubleClick = useCallback((tabId: string) => {

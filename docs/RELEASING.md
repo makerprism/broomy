@@ -15,51 +15,26 @@ Step-by-step guide for building, signing, notarizing, and publishing a release.
 
 You need a **Developer ID Application** certificate. This is different from development/distribution certificates used for App Store apps.
 
-If the Apple Developer account is **not** the account your Mac is signed into, you cannot use Xcode's automatic certificate management. Follow these manual steps:
+#### Using Xcode (recommended)
 
-#### a. Generate a Certificate Signing Request (CSR)
+Xcode can create and install certificates automatically, even if the Developer account is not the Apple ID your Mac is signed into. Just add the Developer account in Xcode:
 
-```bash
-# Open Keychain Access > Certificate Assistant > Request a Certificate From a Certificate Authority
-# Or use the command line:
-openssl req -new -newkey rsa:2048 -nodes \
-  -keyout broomy-signing.key \
-  -out broomy-signing.csr \
-  -subj "/CN=Broomy Signing/O=Your Org"
-```
+1. Open **Xcode > Settings > Accounts**
+2. Click **+** and sign in with the Apple Developer account
+3. Select the account, click **Manage Certificates**
+4. Click **+** and choose **Developer ID Application**
+5. Xcode creates the certificate and installs it in your keychain automatically
 
-Using Keychain Access (recommended):
-1. Open **Keychain Access**
-2. Menu: **Keychain Access > Certificate Assistant > Request a Certificate From a Certificate Authority...**
-3. Enter the email address associated with the Apple Developer account
-4. Select **Saved to disk**
-5. Save the `.certSigningRequest` file
+#### Manual method (alternative)
 
-#### b. Create the Certificate in Apple Developer Portal
+If you prefer not to use Xcode, you can create the certificate manually:
 
-1. Go to [developer.apple.com/account/resources/certificates](https://developer.apple.com/account/resources/certificates/list)
-2. Sign in with the **Developer account** (not your personal Apple ID)
-3. Click **+** to create a new certificate
-4. Select **Developer ID Application**
-5. Upload the CSR file from step (a)
-6. Download the resulting `.cer` file
+1. Generate a CSR in **Keychain Access > Certificate Assistant > Request a Certificate From a Certificate Authority**
+2. Go to [developer.apple.com/account/resources/certificates](https://developer.apple.com/account/resources/certificates/list)
+3. Click **+**, select **Developer ID Application**, and upload the CSR
+4. Download the `.cer` file and double-click to import it into your keychain
 
-#### c. Import the Certificate into Your Keychain
-
-```bash
-# Double-click the .cer file, or:
-security import developer_id_application.cer -k ~/Library/Keychains/login.keychain-db
-```
-
-If you generated the CSR via command line (not Keychain Access), you also need to import the private key:
-
-```bash
-# Convert key to p12 format first
-openssl pkcs12 -export -inkey broomy-signing.key -in developer_id_application.cer -out broomy-signing.p12
-security import broomy-signing.p12 -k ~/Library/Keychains/login.keychain-db
-```
-
-#### d. Verify the Certificate is Installed
+#### Verify the Certificate is Installed
 
 ```bash
 security find-identity -v -p codesigning
@@ -91,7 +66,7 @@ Create a `.env` file in the project root (it's already in `.gitignore`):
 ```bash
 # .env
 # Apple code signing identity (exact string from `security find-identity`)
-CSC_NAME="Developer ID Application: Your Name (TEAM_ID)"
+CSC_NAME="Your Name (TEAM_ID)"
 
 # For notarization
 APPLE_ID="developer@example.com"
@@ -108,9 +83,30 @@ xcrun notarytool store-credentials "broomy-notarize" \
   --password "xxxx-xxxx-xxxx-xxxx"
 ```
 
-## Building a Signed Release
+## Full Release (Recommended)
 
-### Quick Method
+The easiest way to cut a release is the all-in-one script:
+
+```bash
+pnpm release:all <patch|minor|major>
+```
+
+This runs the entire pipeline in order:
+
+1. Pre-flight checks (must be on `main`, clean working tree, signing credentials present)
+2. Lint, typecheck, and unit tests
+3. Version bump (`package.json` + `website/package.json`)
+4. Commit and tag (`vX.Y.Z`)
+5. Signed build with notarization (`pnpm dist:signed`)
+6. Confirmation prompt showing version, tag, and artifacts
+7. Push commit and tag to origin
+8. Create GitHub release with artifacts
+
+If anything fails, the script stops immediately. If you decline at the confirmation prompt, the commit and tag remain local-only (the script prints undo instructions).
+
+## Building a Signed Release (Without Publishing)
+
+If you only want to build without publishing:
 
 ```bash
 pnpm dist:signed
@@ -118,13 +114,13 @@ pnpm dist:signed
 
 This script loads your `.env`, enables notarization, and runs the full build. See [what it does](#what-dist-signed-does) below.
 
-### Manual Method
+## Manual Method
 
 If you prefer to run each step yourself:
 
 ```bash
 # 1. Set environment variables
-export CSC_NAME="Developer ID Application: Your Name (TEAM_ID)"
+export CSC_NAME="Your Name (TEAM_ID)"
 export APPLE_ID="developer@example.com"
 export APPLE_APP_SPECIFIC_PASSWORD="xxxx-xxxx-xxxx-xxxx"
 export APPLE_TEAM_ID="XXXXXXXXXX"
@@ -135,29 +131,16 @@ pnpm build && electron-builder --mac -c.mac.notarize.teamId="$APPLE_TEAM_ID"
 # 3. Verify the result is signed and notarized
 codesign --verify --deep --strict dist/mac-arm64/Broomy.app
 spctl --assess --type execute dist/mac-arm64/Broomy.app
-```
 
-## Publishing a GitHub Release
-
-Once the signed artifacts are in `dist/`:
-
-```bash
-# 1. Bump the version in package.json (if you haven't already)
-# 2. Commit and tag
-git add package.json
+# 4. Bump the version, commit, tag, push
+pnpm version:bump patch
+git add package.json website/package.json
 git commit -m "Release v1.2.3"
 git tag v1.2.3
-
-# 3. Push
 git push && git push --tags
 
-# 4. Create the GitHub release
+# 5. Create the GitHub release
 pnpm release
-```
-
-The `release` script runs:
-```
-gh release create v$version dist/*.dmg dist/*.zip --title "Broomy v$version" --generate-notes
 ```
 
 ## What `dist:signed` Does
@@ -193,7 +176,7 @@ and make sure `CSC_NAME` exactly matches one of the listed identities.
 
 ### "The developer account is not the account my Mac is signed into"
 
-This is fine. Code signing uses certificates in your **keychain**, not your macOS login. As long as you imported the certificate (step 1c), signing will work regardless of which Apple ID your Mac uses for iCloud.
+This is fine. You can add any Apple Developer account in Xcode (Settings > Accounts) and create certificates from there, regardless of which Apple ID your Mac uses for iCloud.
 
 ### Notarization is slow
 

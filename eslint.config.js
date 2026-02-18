@@ -89,9 +89,19 @@ export default tseslint.config(
 
   // Relax rules for test files
   {
-    files: ['**/*.test.ts', '**/*.test.tsx', 'src/test/**'],
+    files: ['**/*.test.ts', '**/*.test.tsx', '**/*.spec.ts', '**/*.spec.tsx', 'src/test/**'],
+    linterOptions: {
+      reportUnusedDisableDirectives: 'off',
+    },
     rules: {
       '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/no-unsafe-function-type': 'off',
+      '@typescript-eslint/require-await': 'off',
+      '@typescript-eslint/unbound-method': 'off',
+      '@typescript-eslint/no-unnecessary-type-conversion': 'off',
+      '@typescript-eslint/no-base-to-string': 'off',
+      '@typescript-eslint/no-unnecessary-condition': 'off',
+      '@typescript-eslint/await-thenable': 'off',
       'max-lines': 'off',
       'max-lines-per-function': 'off',
     },

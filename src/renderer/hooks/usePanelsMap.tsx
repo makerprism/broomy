@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react'
+import React, { useMemo, useState, useEffect } from 'react'
 import Terminal from '../components/Terminal'
 import TabbedTerminal from '../components/TabbedTerminal'
 import Explorer from '../components/explorer'
@@ -6,6 +6,8 @@ import FileViewer from '../components/FileViewer'
 import ReviewPanel from '../components/review'
 import AgentSettings from '../components/AgentSettings'
 import SessionList from '../components/SessionList'
+import WelcomeScreen from '../components/WelcomeScreen'
+import TutorialPanel from '../components/TutorialPanel'
 import { useSessionStore, type Session } from '../store/sessions'
 import { PANEL_IDS } from '../panels'
 import type { FileStatus } from '../components/FileViewer'
@@ -13,7 +15,7 @@ import type { GitFileStatus, GitStatusResult, ManagedRepo } from '../../preload/
 import type { ExplorerFilter, PrState } from '../store/sessions'
 import type { NavigationTarget } from '../utils/fileNavigation'
 
-interface PanelsMapConfig {
+export interface PanelsMapConfig {
   sessions: Session[]
   activeSessionId: string | null
   activeSession: Session | undefined
@@ -69,7 +71,9 @@ function useExplorerPanel(config: PanelsMapConfig) {
         gitStatus={activeSessionGitStatus}
         syncStatus={activeSessionGitStatusResult}
         filter={activeSession.explorerFilter}
-        onFilterChange={(filter) => activeSessionId && setExplorerFilter(activeSessionId, filter)}
+        onFilterChange={(filter) => {
+          if (activeSessionId) setExplorerFilter(activeSessionId, filter)
+        }}
         onGitStatusRefresh={fetchGitStatus}
         recentFiles={activeSession.recentFiles}
         sessionId={activeSessionId ?? undefined}
@@ -107,6 +111,9 @@ function useFileViewerPanel(config: PanelsMapConfig) {
     handleToggleFileViewer, handleFileViewerPositionChange, selectedFileStatus, fetchGitStatus,
   } = config
 
+  const [tmpdir, setTmpdir] = useState('/tmp')
+  useEffect(() => { void window.app.tmpdir().then(setTmpdir) }, [])
+
   return useMemo(() => {
     if (!activeSession?.showFileViewer) return null
     return (
@@ -128,12 +135,12 @@ function useFileViewerPanel(config: PanelsMapConfig) {
         diffLabel={diffLabel}
         reviewContext={activeSession.sessionType === 'review' ? {
           sessionDirectory: activeSession.directory,
-          commentsFilePath: `/tmp/broomy-review-${activeSession.id}/comments.json`,
+          commentsFilePath: `${tmpdir}/broomy-review-${activeSession.id}/comments.json`,
         } : undefined}
         onOpenFile={(targetPath, line) => navigateToFile({ filePath: targetPath, openInDiffMode: false, scrollToLine: line })}
       />
     )
-  }, [activeSession, selectedFileStatus, openFileInDiffMode, scrollToLine, searchHighlight, diffBaseRef, diffCurrentRef, diffLabel, fetchGitStatus, handleToggleFileViewer, navigateToFile])
+  }, [activeSession, selectedFileStatus, openFileInDiffMode, scrollToLine, searchHighlight, diffBaseRef, diffCurrentRef, diffLabel, fetchGitStatus, handleToggleFileViewer, navigateToFile, tmpdir])
 }
 
 export function usePanelsMap(config: PanelsMapConfig) {
@@ -164,15 +171,10 @@ export function usePanelsMap(config: PanelsMapConfig) {
         </div>
       ))}
       {sessions.length === 0 && (
-        <div className="h-full w-full flex items-center justify-center text-text-secondary">
-          <div className="text-center">
-            <p>No sessions yet.</p>
-            <p className="text-sm mt-2">Click &quot;+ New Session&quot; to add a git repository.</p>
-          </div>
-        </div>
+        <WelcomeScreen onNewSession={handleNewSession} />
       )}
     </div>
-  ), [sessions, activeSessionId, getAgentCommand, getAgentEnv])
+  ), [sessions, activeSessionId, getAgentCommand, getAgentEnv, handleNewSession])
 
   const userTerminalPanel = useMemo(() => (
     <div className="h-full w-full relative">
@@ -222,8 +224,13 @@ export function usePanelsMap(config: PanelsMapConfig) {
       />
     ) : null,
     [PANEL_IDS.SETTINGS]: globalPanelVisibility[PANEL_IDS.SETTINGS] ? (
-      <AgentSettings onClose={() => toggleGlobalPanel(PANEL_IDS.SETTINGS)} />
+      <AgentSettings onClose={() => {
+        toggleGlobalPanel(PANEL_IDS.SETTINGS)
+      }} />
     ) : null,
+    [PANEL_IDS.TUTORIAL]: (
+      <TutorialPanel />
+    ),
   }), [
     sessions, activeSessionId, activeSession,
     agentTerminalPanel, userTerminalPanel,

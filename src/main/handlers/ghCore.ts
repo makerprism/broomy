@@ -1,38 +1,74 @@
 import { IpcMain } from 'electron'
-import { execSync } from 'child_process'
+import { execFile, exec } from 'child_process'
+import { promisify } from 'util'
 import simpleGit from 'simple-git'
 import { buildPrCreateUrl } from '../gitStatusParser'
-import { isWindows } from '../platform'
+import { isWindows, getExecShell } from '../platform'
 import { HandlerContext, expandHomePath, getE2EMockBranches } from './types'
+
+const execFileAsync = promisify(execFile)
+const execAsync = promisify(exec)
+
+async function runCommand(command: string, args: string[], options: { cwd?: string; timeout?: number }): Promise<string> {
+  const { stdout } = await execFileAsync(command, args, {
+    ...options,
+    encoding: 'utf-8',
+  })
+  return stdout
+}
+
+async function runShellCommand(command: string, options: { cwd?: string; timeout?: number }): Promise<string> {
+  const shell = getExecShell()
+  const { stdout } = await execAsync(command, {
+    ...options,
+    encoding: 'utf-8',
+    shell: shell || undefined,
+  })
+  return stdout
+}
 
 export function register(ipcMain: IpcMain, ctx: HandlerContext): void {
   const E2E_MOCK_BRANCHES = getE2EMockBranches(ctx.isScreenshotMode)
 
   // Agent CLI installation check
-  ipcMain.handle('agent:isInstalled', (_event, command: string) => {
+  ipcMain.handle('agent:isInstalled', async (_event, command: string) => {
     if (ctx.isE2ETest) return true
     try {
-      execSync(isWindows ? `where ${command}` : `which ${command}`, { stdio: 'ignore' })
+      if (isWindows) {
+        await execFileAsync('where', [command], { encoding: 'utf-8' })
+      } else {
+        await runShellCommand(`command -v ${command}`, { timeout: 5000 })
+      }
       return true
     } catch {
       return false
     }
   })
 
-  ipcMain.handle('gh:isInstalled', () => {
+  ipcMain.handle('git:isInstalled', async () => {
+    if (ctx.isE2ETest) return true
+    try {
+      await execFileAsync('git', ['--version'], { encoding: 'utf-8' })
+      return true
+    } catch {
+      return false
+    }
+  })
+
+  ipcMain.handle('gh:isInstalled', async () => {
     if (ctx.isE2ETest) {
       return true
     }
 
     try {
-      execSync('gh --version', { stdio: 'ignore' })
+      await execFileAsync('gh', ['--version'], { encoding: 'utf-8' })
       return true
     } catch {
       return false
     }
   })
 
-  ipcMain.handle('gh:issues', (_event, repoDir: string) => {
+  ipcMain.handle('gh:issues', async (_event, repoDir: string) => {
     if (ctx.isE2ETest) {
       return [
         { number: 42, title: 'Add user authentication', labels: ['feature', 'priority'], url: 'https://github.com/user/demo-project/issues/42' },
@@ -41,9 +77,8 @@ export function register(ipcMain: IpcMain, ctx: HandlerContext): void {
     }
 
     try {
-      const result = execSync('gh issue list --assignee @me --state open --json number,title,labels,url --limit 50', {
+      const result = await runCommand('gh', ['issue', 'list', '--assignee', '@me', '--state', 'open', '--json', 'number,title,labels,url', '--limit', '50'], {
         cwd: expandHomePath(repoDir),
-        encoding: 'utf-8',
         timeout: 30000,
       })
       const issues = JSON.parse(result)
@@ -58,15 +93,14 @@ export function register(ipcMain: IpcMain, ctx: HandlerContext): void {
     }
   })
 
-  ipcMain.handle('gh:repoSlug', (_event, repoDir: string) => {
+  ipcMain.handle('gh:repoSlug', async (_event, repoDir: string) => {
     if (ctx.isE2ETest) {
       return 'user/demo-project'
     }
 
     try {
-      const result = execSync('gh repo view --json nameWithOwner --jq .nameWithOwner', {
+      const result = await runCommand('gh', ['repo', 'view', '--json', 'nameWithOwner', '--jq', '.nameWithOwner'], {
         cwd: expandHomePath(repoDir),
-        encoding: 'utf-8',
         timeout: 15000,
       })
       return result.trim() || null
@@ -75,7 +109,7 @@ export function register(ipcMain: IpcMain, ctx: HandlerContext): void {
     }
   })
 
-  ipcMain.handle('gh:prStatus', (_event, repoDir: string) => {
+  ipcMain.handle('gh:prStatus', async (_event, repoDir: string) => {
     if (ctx.isE2ETest) {
       const branch = E2E_MOCK_BRANCHES[repoDir]
       if (branch && branch !== 'main') {
@@ -92,11 +126,9 @@ export function register(ipcMain: IpcMain, ctx: HandlerContext): void {
     }
 
     try {
-      const result = execSync('gh pr view --json number,title,state,url,headRefName,baseRefName', {
+      const result = await runCommand('gh', ['pr', 'view', '--json', 'number,title,state,url,headRefName,baseRefName'], {
         cwd: expandHomePath(repoDir),
-        encoding: 'utf-8',
         timeout: 15000,
-        stdio: ['pipe', 'pipe', 'ignore'],
       })
       const pr = JSON.parse(result)
       return {
@@ -112,15 +144,14 @@ export function register(ipcMain: IpcMain, ctx: HandlerContext): void {
     }
   })
 
-  ipcMain.handle('gh:hasWriteAccess', (_event, repoDir: string) => {
+  ipcMain.handle('gh:hasWriteAccess', async (_event, repoDir: string) => {
     if (ctx.isE2ETest) {
       return true
     }
 
     try {
-      const result = execSync('gh repo view --json viewerPermission --jq .viewerPermission', {
+      const result = await runCommand('gh', ['repo', 'view', '--json', 'viewerPermission', '--jq', '.viewerPermission'], {
         cwd: expandHomePath(repoDir),
-        encoding: 'utf-8',
         timeout: 15000,
       })
       const permission = result.trim()
@@ -178,11 +209,11 @@ export function register(ipcMain: IpcMain, ctx: HandlerContext): void {
       const currentBranch = status.current
       if (!currentBranch) return null
 
-      const repoSlug = execSync('gh repo view --json nameWithOwner --jq .nameWithOwner', {
+      const repoSlugResult = await runCommand('gh', ['repo', 'view', '--json', 'nameWithOwner', '--jq', '.nameWithOwner'], {
         cwd: expandHomePath(repoDir),
-        encoding: 'utf-8',
         timeout: 15000,
-      }).trim()
+      })
+      const repoSlug = repoSlugResult.trim()
 
       if (!repoSlug) return null
 

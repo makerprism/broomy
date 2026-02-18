@@ -7,21 +7,26 @@
  * manages file navigation with unsaved-changes guards and global keyboard shortcuts.
  * The outer App component wraps AppContent in the PanelProvider context.
  */
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import Layout from './components/Layout'
 import NewSessionDialog from './components/NewSessionDialog'
 import PanelPicker from './components/PanelPicker'
 import ProfileChip from './components/ProfileChip'
+import HelpModal from './components/HelpModal'
+import ShortcutsModal from './components/ShortcutsModal'
 import { useSessionStore, type Session, type SessionStatus, type LayoutSizes } from './store/sessions'
 import { useAgentStore } from './store/agents'
 import { useRepoStore } from './store/repos'
 import { useProfileStore } from './store/profiles'
-import { PanelProvider } from './panels'
+import { PanelProvider, PANEL_IDS } from './panels'
+import ErrorBoundary from './components/ErrorBoundary'
+import ErrorDetailModal from './components/ErrorDetailModal'
 import { useGitPolling } from './hooks/useGitPolling'
 import { useFileNavigation } from './hooks/useFileNavigation'
 import { useSessionLifecycle } from './hooks/useSessionLifecycle'
 import { useAppCallbacks } from './hooks/useAppCallbacks'
 import { usePanelsMap } from './hooks/usePanelsMap'
+import { useHelpMenu } from './hooks/useHelpMenu'
 
 // Re-export types for backwards compatibility
 export type { Session, SessionStatus }
@@ -32,6 +37,7 @@ const DEFAULT_LAYOUT_SIZES: LayoutSizes = {
   userTerminalHeight: 192,
   diffPanelWidth: 320,
   reviewPanelWidth: 320,
+  tutorialPanelWidth: 320,
 }
 
 function UnsavedChangesDialog({ onCancel, onDiscard, onSave }: {
@@ -50,6 +56,43 @@ function UnsavedChangesDialog({ onCancel, onDiscard, onSave }: {
           <button onClick={onSave} className="px-3 py-1.5 text-xs rounded bg-accent text-white hover:bg-accent/80 transition-colors">Save</button>
         </div>
       </div>
+    </div>
+  )
+}
+
+function DuplicateSessionModal({ info, onDismiss }: {
+  info: { name: string; wasArchived: boolean }; onDismiss: () => void
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+      <div className="bg-bg-secondary border border-border rounded-lg shadow-xl p-4 max-w-sm mx-4">
+        <p className="text-sm text-text-primary mb-4">
+          {info.wasArchived
+            ? <>Restored archived session <span className="font-medium">{info.name}</span></>
+            : <>Switched to existing session <span className="font-medium">{info.name}</span></>
+          }
+        </p>
+        <div className="flex justify-end">
+          <button
+            onClick={onDismiss}
+            className="px-3 py-1.5 text-xs rounded bg-accent text-white hover:bg-accent/80 transition-colors"
+          >
+            OK
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function GitMissingBanner() {
+  const { gitAvailable } = useRepoStore()
+  if (gitAvailable !== false) return null
+  return (
+    <div className="bg-red-900/30 border-b border-red-500/30 px-4 py-2 text-xs text-red-300 flex items-center gap-2">
+      <span className="font-medium">git is not installed.</span>
+      <span className="text-red-400">Broomy requires git to manage repositories.</span>
+      <button onClick={() => window.shell.openExternal('https://git-scm.com/downloads')} className="text-accent hover:underline ml-1">Download git</button>
     </div>
   )
 }
@@ -87,14 +130,16 @@ function AppContent() {
   } = useSessionStore()
 
   const { agents, loadAgents } = useAgentStore()
-  const { repos, loadRepos, checkGhAvailability } = useRepoStore()
+  const { repos, loadRepos, checkGhAvailability, checkGitAvailability } = useRepoStore()
   const { currentProfileId, profiles, loadProfiles, switchProfile } = useProfileStore()
+  const { showHelpModal, setShowHelpModal, showShortcutsModal, setShowShortcutsModal } = useHelpMenu(currentProfileId)
   const currentProfile = profiles.find((p) => p.id === currentProfileId)
 
   const activeSession = sessions.find((s) => s.id === activeSessionId)
 
   const [showNewSessionDialog, setShowNewSessionDialog] = useState(false)
   const [showPanelPicker, setShowPanelPicker] = useState(false)
+  const [duplicateSessionInfo, setDuplicateSessionInfo] = useState<{ name: string; wasArchived: boolean } | null>(null)
 
   // Git polling hook
   const {
@@ -146,7 +191,7 @@ function AppContent() {
     loadSessions,
     loadAgents,
     loadRepos,
-    checkGhAvailability,
+    checkGhAvailability, checkGitAvailability,
     switchProfile,
     markSessionRead,
     refreshAllBranches,
@@ -179,46 +224,33 @@ function AppContent() {
     setFileViewerPosition,
     updatePrState,
     setShowNewSessionDialog,
+    onSessionAlreadyExists: setDuplicateSessionInfo,
   })
+
+  const handleSearchFiles = useCallback(() => {
+    if (!activeSessionId) return
+    if (!activeSession?.panelVisibility[PANEL_IDS.EXPLORER]) togglePanel(activeSessionId, PANEL_IDS.EXPLORER)
+    setExplorerFilter(activeSessionId, 'search')
+  }, [activeSessionId, activeSession, togglePanel, setExplorerFilter])
+
+  const handleToggleGlobalPanel = useCallback((panelId: string) => {
+    toggleGlobalPanel(panelId)
+  }, [toggleGlobalPanel])
 
   // Panels map hook
   const panelsMap = usePanelsMap({
-    sessions,
-    activeSessionId,
-    activeSession,
-    activeSessionGitStatus,
-    activeSessionGitStatusResult,
-    selectedFileStatus,
-    navigateToFile,
-    openFileInDiffMode,
-    scrollToLine,
-    searchHighlight,
-    diffBaseRef,
-    diffCurrentRef,
-    diffLabel,
-    setIsFileViewerDirty,
-    saveCurrentFileRef,
-    handleSelectSession,
-    handleNewSession,
-    removeSession: (id, deleteWorktree) => { void handleDeleteSession(id, deleteWorktree) },
-    refreshPrStatus,
-    archiveSession,
-    unarchiveSession,
-    handleToggleFileViewer,
-    handleFileViewerPositionChange,
-    fetchGitStatus,
-    getAgentCommand,
-    getAgentEnv,
-    globalPanelVisibility,
-    toggleGlobalPanel,
-    selectFile,
-    setExplorerFilter,
-    recordPushToMain,
-    clearPushToMain,
-    updatePrState,
-    setPanelVisibility,
-    setToolbarPanels,
-    repos,
+    sessions, activeSessionId, activeSession,
+    activeSessionGitStatus, activeSessionGitStatusResult, selectedFileStatus,
+    navigateToFile, openFileInDiffMode, scrollToLine, searchHighlight,
+    diffBaseRef, diffCurrentRef, diffLabel, setIsFileViewerDirty, saveCurrentFileRef,
+    handleSelectSession, handleNewSession,
+    removeSession: (id, deleteWorktree) => { handleDeleteSession(id, deleteWorktree) },
+    refreshPrStatus, archiveSession, unarchiveSession,
+    handleToggleFileViewer, handleFileViewerPositionChange,
+    fetchGitStatus, getAgentCommand, getAgentEnv,
+    globalPanelVisibility, toggleGlobalPanel, selectFile, setExplorerFilter,
+    recordPushToMain, clearPushToMain, updatePrState,
+    setPanelVisibility, setToolbarPanels, repos,
   })
 
   if (isLoading) {
@@ -231,6 +263,7 @@ function AppContent() {
 
   return (
     <>
+      <GitMissingBanner />
       <Layout
         panels={panelsMap}
         panelVisibility={activeSession?.panelVisibility ?? {}}
@@ -244,8 +277,9 @@ function AppContent() {
         title={activeSession ? activeSession.name : undefined}
         profileChip={<ProfileChip onSwitchProfile={handleSwitchProfile} />}
         onTogglePanel={handleTogglePanel}
-        onToggleGlobalPanel={toggleGlobalPanel}
+        onToggleGlobalPanel={handleToggleGlobalPanel}
         onOpenPanelPicker={() => setShowPanelPicker(true)}
+        onSearchFiles={handleSearchFiles}
       />
 
       {/* New Session Dialog */}
@@ -268,6 +302,21 @@ function AppContent() {
       {pendingNavigation && (
         <UnsavedChangesDialog onCancel={handlePendingCancel} onDiscard={handlePendingDiscard} onSave={handlePendingSave} />
       )}
+
+      {/* Help Modal */}
+      {showHelpModal && (
+        <HelpModal onClose={() => setShowHelpModal(false)} />
+      )}
+
+      {/* Shortcuts Modal */}
+      {showShortcutsModal && (
+        <ShortcutsModal onClose={() => setShowShortcutsModal(false)} />
+      )}
+
+      {/* Duplicate Session Info Modal */}
+      {duplicateSessionInfo && (
+        <DuplicateSessionModal info={duplicateSessionInfo} onDismiss={() => setDuplicateSessionInfo(null)} />
+      )}
     </>
   )
 }
@@ -281,12 +330,15 @@ function App() {
   }, [])
 
   return (
-    <PanelProvider
-      toolbarPanels={toolbarPanels}
-      onToolbarPanelsChange={setToolbarPanels}
-    >
-      <AppContent />
-    </PanelProvider>
+    <ErrorBoundary>
+      <PanelProvider
+        toolbarPanels={toolbarPanels}
+        onToolbarPanelsChange={setToolbarPanels}
+      >
+        <AppContent />
+        <ErrorDetailModal />
+      </PanelProvider>
+    </ErrorBoundary>
   )
 }
 

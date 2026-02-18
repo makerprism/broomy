@@ -24,8 +24,8 @@ export default function Hero() {
           AI coding agents
         </h1>
         <p className="mx-auto mt-6 max-w-2xl text-lg text-text-body leading-relaxed">
-          Manage multiple AI sessions across repositories. See what every agent
-          is doing. Fully open source, extensible, and MIT licensed.
+          Lead a team of agents and see when each needs help. Let an AI help you
+          review code. Fully open source and extensible.
         </p>
 
         <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:flex-row">
@@ -39,6 +39,9 @@ export default function Hero() {
             View on GitHub
           </a>
           <DownloadButton />
+        </div>
+        <div className="mx-auto mt-5 max-w-2xl rounded-lg border border-border-hover bg-bg-elevated px-4 py-3 text-sm text-text-body">
+          Public Preview - stable enough for daily use, but you may run into issues
         </div>
 
         {/* Badges row */}

@@ -1,6 +1,6 @@
 {
   "name": "broomy-website",
-  "version": "0.1.0",
+  "version": "0.6.1",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -15,10 +15,10 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.0.0",
-    "@types/node": "^22.0.0",
-    "@types/react": "^18.2.0",
+    "@types/node": "^22.19.9",
+    "@types/react": "^18.3.27",
     "@types/react-dom": "^18.2.0",
     "tailwindcss": "^4.0.0",
-    "typescript": "^5.7.0"
+    "typescript": "^5.9.3"
   }
 }

@@ -6,20 +6,36 @@
  * whether it's running in a DOM environment (jsdom/happy-dom) or plain Node: in DOM
  * mode it extends the existing window object, in Node mode it creates a minimal
  * window mock with location, navigator, and event listener stubs.
+ *
+ * Each mock is type-checked against the real API type using `satisfies`.
+ * If the preload type changes (e.g. a sync property becomes an async function),
+ * TypeScript will flag the mismatch here at compile time.
  */
-import { vi } from 'vitest'
+import { vi, afterEach, type Mock } from 'vitest'
+import { checkAndReset } from './console-guard'
+import type { PtyApi } from '../preload/apis/pty'
+import type { FsApi } from '../preload/apis/fs'
+import type { GitApi } from '../preload/apis/git'
+import type { GhApi } from '../preload/apis/gh'
+import type { ConfigApi, ProfilesApi, AgentsApi, ReposApi } from '../preload/apis/config'
+import type { ShellApi, DialogApi, AppApi } from '../preload/apis/shell'
+import type { MenuApi, TsApi } from '../preload/apis/menu'
+
+/** Maps every key of an API type to a Vitest Mock — catches missing/extra keys and non-function values. */
+type Mocked<T> = { [K in keyof T]: Mock }
 
 // Mock window.config
-const mockConfig = {
+const mockConfig: Mocked<ConfigApi> = {
   load: vi.fn().mockResolvedValue({ agents: [], sessions: [], repos: [] }),
   save: vi.fn().mockResolvedValue({ success: true }),
 }
 
 // Mock window.git
-const mockGit = {
+const mockGit: Mocked<GitApi> = {
+  isInstalled: vi.fn().mockResolvedValue(true),
   getBranch: vi.fn().mockResolvedValue('main'),
   isGitRepo: vi.fn().mockResolvedValue(true),
-  status: vi.fn().mockResolvedValue({ files: [], ahead: 0, behind: 0, tracking: null, current: 'main' }),
+  status: vi.fn().mockResolvedValue({ files: [], ahead: 0, behind: 0, tracking: null, current: 'main', isMerging: false }),
   diff: vi.fn().mockResolvedValue(''),
   show: vi.fn().mockResolvedValue(''),
   stage: vi.fn().mockResolvedValue({ success: true }),
@@ -27,6 +43,7 @@ const mockGit = {
   unstage: vi.fn().mockResolvedValue({ success: true }),
   checkoutFile: vi.fn().mockResolvedValue({ success: true }),
   commit: vi.fn().mockResolvedValue({ success: true }),
+  commitMerge: vi.fn().mockResolvedValue({ success: true }),
   push: vi.fn().mockResolvedValue({ success: true }),
   pull: vi.fn().mockResolvedValue({ success: true }),
   clone: vi.fn().mockResolvedValue({ success: true }),
@@ -54,14 +71,15 @@ const mockGit = {
 }
 
 // Mock window.app
-const mockApp = {
+const mockApp: Mocked<AppApi> = {
   isDev: vi.fn().mockResolvedValue(false),
   homedir: vi.fn().mockResolvedValue('/Users/test'),
   platform: vi.fn().mockResolvedValue('darwin'),
+  tmpdir: vi.fn().mockResolvedValue('/tmp'),
 }
 
 // Mock window.profiles
-const mockProfiles = {
+const mockProfiles: Mocked<ProfilesApi> = {
   list: vi.fn().mockResolvedValue({ profiles: [], lastProfileId: 'default' }),
   save: vi.fn().mockResolvedValue({ success: true }),
   openWindow: vi.fn().mockResolvedValue({ success: true, alreadyOpen: false }),
@@ -69,7 +87,7 @@ const mockProfiles = {
 }
 
 // Mock window.gh
-const mockGh = {
+const mockGh: Mocked<GhApi> = {
   isInstalled: vi.fn().mockResolvedValue(true),
   issues: vi.fn().mockResolvedValue([]),
   repoSlug: vi.fn().mockResolvedValue(null),
@@ -84,18 +102,19 @@ const mockGh = {
 }
 
 // Mock window.shell
-const mockShell = {
+const mockShell: Mocked<ShellApi> = {
+  exec: vi.fn().mockResolvedValue({ success: true, stdout: '', stderr: '', exitCode: 0 }),
   openExternal: vi.fn().mockResolvedValue(undefined),
 }
 
 // Mock window.repos
-const mockRepos = {
+const mockRepos: Mocked<ReposApi> = {
   getInitScript: vi.fn().mockResolvedValue(''),
   saveInitScript: vi.fn().mockResolvedValue({ success: true }),
 }
 
 // Mock window.ts
-const mockTs = {
+const mockTs: Mocked<TsApi> = {
   getProjectContext: vi.fn().mockResolvedValue({
     projectRoot: '/tmp/test-project',
     compilerOptions: {},
@@ -104,17 +123,22 @@ const mockTs = {
 }
 
 // Mock window.agents
-const mockAgents = {
+const mockAgents: Mocked<AgentsApi> = {
   isInstalled: vi.fn().mockResolvedValue(true),
 }
 
+// Mock window.help
+const mockHelp = {
+  onHelpMenu: vi.fn().mockReturnValue(() => {}),
+}
+
 // Mock window.menu
-const mockMenu = {
+const mockMenu: Mocked<MenuApi> = {
   popup: vi.fn().mockResolvedValue(null),
 }
 
 // Mock window.fs
-const mockFs = {
+const mockFs: Mocked<FsApi> = {
   readDir: vi.fn().mockResolvedValue([]),
   readFile: vi.fn().mockResolvedValue(''),
   writeFile: vi.fn().mockResolvedValue({ success: true }),
@@ -131,7 +155,7 @@ const mockFs = {
 }
 
 // Mock window.pty
-const mockPty = {
+const mockPty: Mocked<PtyApi> = {
   create: vi.fn().mockResolvedValue(undefined),
   write: vi.fn().mockResolvedValue(undefined),
   resize: vi.fn().mockResolvedValue(undefined),
@@ -141,7 +165,7 @@ const mockPty = {
 }
 
 // Mock window.dialog
-const mockDialog = {
+const mockDialog: Mocked<DialogApi> = {
   openFolder: vi.fn().mockResolvedValue(null),
 }
 
@@ -155,6 +179,7 @@ const broomyMocks = {
   shell: mockShell,
   repos: mockRepos,
   agents: mockAgents,
+  help: mockHelp,
   menu: mockMenu,
   ts: mockTs,
   fs: mockFs,
@@ -194,3 +219,10 @@ if (typeof globalThis.window !== 'undefined' && typeof globalThis.document !== '
     writable: true,
   })
 }
+
+// Fail tests that produce unexpected console.error or console.warn output.
+// Tests that intentionally trigger these should call allowConsoleError() or
+// allowConsoleWarn() from '../test/console-guard'.
+afterEach(() => {
+  checkAndReset()
+})

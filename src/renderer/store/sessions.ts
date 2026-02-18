@@ -43,6 +43,7 @@ export interface LayoutSizes {
   userTerminalHeight: number
   diffPanelWidth: number
   reviewPanelWidth: number
+  tutorialPanelWidth: number
 }
 
 export type ExplorerFilter = 'files' | 'source-control' | 'search' | 'recent'
@@ -105,10 +106,11 @@ export interface Session {
   isArchived: boolean
 }
 
-// Global panel visibility (sidebar, settings)
+// Global panel visibility (sidebar, settings, tutorial)
 const DEFAULT_GLOBAL_PANEL_VISIBILITY: PanelVisibility = {
   [PANEL_IDS.SIDEBAR]: true,
   [PANEL_IDS.SETTINGS]: false,
+  [PANEL_IDS.TUTORIAL]: false,
 }
 
 interface SessionStore {
@@ -124,7 +126,7 @@ interface SessionStore {
 
   // Actions
   loadSessions: (profileId?: string) => Promise<void>
-  addSession: (directory: string, agentId: string | null, extra?: { repoId?: string; issueNumber?: number; issueTitle?: string; name?: string; sessionType?: 'default' | 'review'; prNumber?: number; prTitle?: string; prUrl?: string; prBaseBranch?: string }) => Promise<void>
+  addSession: (directory: string, agentId: string | null, extra?: { repoId?: string; issueNumber?: number; issueTitle?: string; name?: string; sessionType?: 'default' | 'review'; prNumber?: number; prTitle?: string; prUrl?: string; prBaseBranch?: string }) => Promise<import('./sessionCoreActions').DuplicateSessionResult | undefined>
   removeSession: (id: string) => void
   setActiveSession: (id: string | null) => void
   updateSessionBranch: (id: string, branch: string) => void

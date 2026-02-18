@@ -3,11 +3,13 @@
  *
  * Stores the list of repositories (each with a name, remote URL, root directory,
  * and default branch), the default clone directory, and GitHub CLI availability.
- * Supports tilde expansion for paths via the main process. Every mutation persists
- * immediately to the profile's config file.
+ * Supports tilde expansion for paths via the main process. Every mutation triggers
+ * a unified debounced save via configPersistence (which assembles the complete
+ * config from all stores before writing).
  */
 import { create } from 'zustand'
 import type { ManagedRepo } from '../../preload/index'
+import { scheduleSave, setLoadedCounts } from './configPersistence'
 
 const generateId = () => `repo-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`
 
@@ -24,20 +26,23 @@ interface RepoStore {
   repos: ManagedRepo[]
   defaultCloneDir: string
   ghAvailable: boolean | null
+  gitAvailable: boolean | null
   profileId?: string
 
   loadRepos: (profileId?: string) => Promise<void>
-  addRepo: (repo: Omit<ManagedRepo, 'id'>) => Promise<void>
-  updateRepo: (id: string, updates: Partial<Omit<ManagedRepo, 'id'>>) => Promise<void>
-  removeRepo: (id: string) => Promise<void>
+  addRepo: (repo: Omit<ManagedRepo, 'id'>) => void
+  updateRepo: (id: string, updates: Partial<Omit<ManagedRepo, 'id'>>) => void
+  removeRepo: (id: string) => void
   setDefaultCloneDir: (dir: string) => Promise<void>
   checkGhAvailability: () => Promise<void>
+  checkGitAvailability: () => Promise<void>
 }
 
 export const useRepoStore = create<RepoStore>((set, get) => ({
   repos: [],
   defaultCloneDir: '',
   ghAvailable: null,
+  gitAvailable: null,
 
   loadRepos: async (profileId?: string) => {
     if (profileId !== undefined) {
@@ -50,73 +55,50 @@ export const useRepoStore = create<RepoStore>((set, get) => ({
       const defaultDir = config.defaultCloneDir
         ? await resolveHome(config.defaultCloneDir)
         : `${home}/repos`
+      const repos = config.repos || []
       set({
-        repos: config.repos || [],
+        repos,
         defaultCloneDir: defaultDir,
         profileId: pid,
       })
+      setLoadedCounts({ repos: repos.length })
     } catch {
       set({ repos: [], defaultCloneDir: '' })
     }
   },
 
-  addRepo: async (repoData) => {
+  addRepo: (repoData) => {
     const repo: ManagedRepo = {
       id: generateId(),
       ...repoData,
     }
 
-    const { repos, profileId } = get()
+    const { repos } = get()
     const updatedRepos = [...repos, repo]
     set({ repos: updatedRepos })
-
-    const config = await window.config.load(profileId)
-    await window.config.save({
-      ...config,
-      profileId,
-      repos: updatedRepos,
-    })
+    scheduleSave()
   },
 
-  updateRepo: async (id, updates) => {
-    const { repos, profileId } = get()
+  updateRepo: (id, updates) => {
+    const { repos } = get()
     const updatedRepos = repos.map((r) =>
       r.id === id ? { ...r, ...updates } : r
     )
     set({ repos: updatedRepos })
-
-    const config = await window.config.load(profileId)
-    await window.config.save({
-      ...config,
-      profileId,
-      repos: updatedRepos,
-    })
+    scheduleSave()
   },
 
-  removeRepo: async (id) => {
-    const { repos, profileId } = get()
+  removeRepo: (id) => {
+    const { repos } = get()
     const updatedRepos = repos.filter((r) => r.id !== id)
     set({ repos: updatedRepos })
-
-    const config = await window.config.load(profileId)
-    await window.config.save({
-      ...config,
-      profileId,
-      repos: updatedRepos,
-    })
+    scheduleSave()
   },
 
   setDefaultCloneDir: async (dir) => {
     const resolved = await resolveHome(dir)
     set({ defaultCloneDir: resolved })
-
-    const { profileId } = get()
-    const config = await window.config.load(profileId)
-    await window.config.save({
-      ...config,
-      profileId,
-      defaultCloneDir: resolved,
-    })
+    scheduleSave()
   },
 
   checkGhAvailability: async () => {
@@ -125,6 +107,15 @@ export const useRepoStore = create<RepoStore>((set, get) => ({
       set({ ghAvailable: available })
     } catch {
       set({ ghAvailable: false })
+    }
+  },
+
+  checkGitAvailability: async () => {
+    try {
+      const available = await window.git.isInstalled()
+      set({ gitAvailable: available })
+    } catch {
+      set({ gitAvailable: false })
     }
   },
 }))

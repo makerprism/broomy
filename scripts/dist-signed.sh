@@ -8,6 +8,12 @@ set -euo pipefail
 # Reads signing credentials from .env or the environment.
 # See docs/RELEASING.md for setup instructions.
 
+if [[ "$(uname -s)" != "Darwin" ]]; then
+  echo "Error: dist-signed.sh only works on macOS (requires codesign, notarytool, etc.)"
+  echo "For unsigned builds on other platforms, use: pnpm dist:linux or pnpm dist:win"
+  exit 1
+fi
+
 cd "$(dirname "$0")/.."
 
 # --- Load .env if present ---
@@ -51,6 +57,11 @@ if ! security find-identity -v -p codesigning | grep -q "$CSC_NAME"; then
   exit 1
 fi
 echo "  Found: $CSC_NAME"
+
+# --- Clean previous build artifacts ---
+echo ""
+echo "Cleaning dist/..."
+rm -rf dist
 
 # --- Build ---
 echo ""

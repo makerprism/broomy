@@ -86,4 +86,47 @@ describe('ProfileChip', () => {
     const { container } = render(<ProfileChip onSwitchProfile={vi.fn()} />)
     expect(container.innerHTML).toBe('')
   })
+
+  it('creates a new profile', async () => {
+    vi.mocked(window.profiles.save).mockResolvedValue({ success: true })
+    vi.mocked(window.profiles.openWindow).mockResolvedValue({ success: true, alreadyOpen: false })
+    render(<ProfileChip onSwitchProfile={vi.fn()} />)
+    fireEvent.click(screen.getByText('Default'))
+    fireEvent.click(screen.getByText('New Profile...'))
+
+    const input = screen.getByPlaceholderText('Profile name')
+    fireEvent.change(input, { target: { value: 'Work' } })
+    fireEvent.click(screen.getByText('Create'))
+
+    // Wait for async operations
+    await vi.waitFor(() => {
+      expect(useProfileStore.getState().profiles.length).toBeGreaterThan(1)
+    })
+  })
+
+  it('saves an edited profile', async () => {
+    vi.mocked(window.profiles.save).mockResolvedValue({ success: true })
+    render(<ProfileChip onSwitchProfile={vi.fn()} />)
+    fireEvent.click(screen.getByText('Default'))
+    fireEvent.click(screen.getByText('Edit "Default"...'))
+
+    const input = screen.getByPlaceholderText('Profile name')
+    fireEvent.change(input, { target: { value: 'Updated' } })
+    fireEvent.click(screen.getByText('Save'))
+
+    await vi.waitFor(() => {
+      expect(useProfileStore.getState().profiles[0].name).toBe('Updated')
+    })
+  })
+
+  it('closes dropdown on outside click', () => {
+    render(<ProfileChip onSwitchProfile={vi.fn()} />)
+    fireEvent.click(screen.getByText('Default'))
+    expect(screen.getByText('New Profile...')).toBeTruthy()
+
+    // Click outside
+    fireEvent.mouseDown(document.body)
+
+    expect(screen.queryByText('New Profile...')).toBeNull()
+  })
 })

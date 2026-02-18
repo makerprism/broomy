@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import type { LayoutSizes, FileViewerPosition } from '../store/sessions'
 
-type DividerType = 'sidebar' | 'explorer' | 'review' | 'fileViewer' | 'userTerminal' | null
+type DividerType = 'sidebar' | 'explorer' | 'review' | 'fileViewer' | 'userTerminal' | 'tutorial' | null
 
 interface UseDividerResizeParams {
   fileViewerPosition: FileViewerPosition

@@ -7,6 +7,11 @@ export default defineConfig({
     plugins: [externalizeDepsPlugin()],
     build: {
       rollupOptions: {
+        input: {
+          index: resolve('src/main/index.ts'),
+          'workers/fsSearch.worker': resolve('src/main/workers/fsSearch.worker.ts'),
+          'workers/tsProject.worker': resolve('src/main/workers/tsProject.worker.ts'),
+        },
         external: ['node-pty', 'simple-git']
       }
     }

@@ -6,9 +6,11 @@ files:
   - '!**/.vscode/*'
   - '!src/*'
   - '!electron.vite.config.*'
-  - '!{.eslintignore,.eslintrc.js,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
+  - '!{.eslintignore,.eslintrc.js,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md,CLAUDE.md,AGENTS.md}'
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
-asar: false
+asar: true
+asarUnpack:
+  - node_modules/node-pty/**
 extraResources:
   - from: scripts
     to: scripts

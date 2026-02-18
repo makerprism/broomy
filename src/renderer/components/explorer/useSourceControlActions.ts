@@ -18,6 +18,7 @@ function createGitActions(
   const {
     setIsSyncing, setIsSyncingWithMain, setGitOpError,
     branchBaseName, setIsPushingToMain, gitStatus,
+    setAgentMergeMessage,
   } = data
 
   const handleSync = async () => {
@@ -53,6 +54,7 @@ function createGitActions(
 
     setIsSyncingWithMain(true)
     setGitOpError(null)
+    setAgentMergeMessage(null)
     try {
       const result = await window.git.pullOriginMain(directory)
       if (result.success) {
@@ -60,7 +62,7 @@ function createGitActions(
       } else if (result.hasConflicts) {
         if (agentPtyId) {
           await window.pty.write(agentPtyId, 'resolve all merge conflicts\r')
-          setGitOpError({ operation: 'Sync with main', message: 'Merge conflicts detected. Agent is resolving them.' })
+          setAgentMergeMessage('Asked agent to resolve merge conflicts. Wait for the agent to finish, then commit the merge.')
         } else {
           setGitOpError({ operation: 'Sync with main', message: 'Merge conflicts detected. Resolve them manually.' })
         }
@@ -118,7 +120,25 @@ function createGitActions(
     }
   }
 
-  return { handleSync, handleSyncWithMain, handlePushToMain, handleCreatePr }
+  const handlePushNewBranch = async (branchName: string) => {
+    if (!directory) return
+    setIsSyncing(true)
+    setGitOpError(null)
+    try {
+      const result = await window.git.pushNewBranch(directory, branchName)
+      if (!result.success) {
+        setGitOpError({ operation: 'Push branch', message: result.error || 'Failed to push branch' })
+        return
+      }
+      onGitStatusRefresh?.()
+    } catch (err) {
+      setGitOpError({ operation: 'Push branch', message: String(err) })
+    } finally {
+      setIsSyncing(false)
+    }
+  }
+
+  return { handleSync, handleSyncWithMain, handlePushToMain, handleCreatePr, handlePushNewBranch }
 }
 
 export function useSourceControlActions({
@@ -132,7 +152,7 @@ export function useSourceControlActions({
     stagedFiles, unstagedFiles,
     commitMessage, setCommitMessage,
     setIsCommitting, setCommitError, setCommitErrorExpanded,
-    setGitOpError,
+    setGitOpError, setAgentMergeMessage,
     expandedCommits, setExpandedCommits,
     commitFilesByHash, setCommitFilesByHash,
     setLoadingCommitFiles,
@@ -142,29 +162,69 @@ export function useSourceControlActions({
 
   const gitActions = createGitActions(directory, onGitStatusRefresh, agentPtyId, onRecordPushToMain, data)
 
+  const handleCommitMerge = async () => {
+    if (!directory) return
+    setIsCommitting(true)
+    setCommitError(null)
+    setGitOpError(null)
+    setAgentMergeMessage(null)
+    try {
+      const result = await window.git.commitMerge(directory)
+      if (result.success) {
+        onGitStatusRefresh?.()
+      } else {
+        const errorMsg = result.error || 'Merge commit failed'
+        setCommitError(errorMsg)
+        setGitOpError({ operation: 'Merge commit', message: errorMsg })
+      }
+    } catch (err) {
+      const errorMsg = String(err)
+      setCommitError(errorMsg)
+      setGitOpError({ operation: 'Merge commit', message: errorMsg })
+    } finally {
+      setIsCommitting(false)
+    }
+  }
+
   const handleRevertFile = async (filePath: string) => {
     if (!directory) return
     if (!window.confirm(`Revert changes to "${filePath}"? This cannot be undone.`)) return
-    await window.git.checkoutFile(directory, filePath)
-    onGitStatusRefresh?.()
+    try {
+      await window.git.checkoutFile(directory, filePath)
+      onGitStatusRefresh?.()
+    } catch (err) {
+      setGitOpError({ operation: 'Revert', message: String(err) })
+    }
   }
 
   const handleStage = async (filePath: string) => {
     if (!directory) return
-    await window.git.stage(directory, filePath)
-    onGitStatusRefresh?.()
+    try {
+      await window.git.stage(directory, filePath)
+      onGitStatusRefresh?.()
+    } catch (err) {
+      setGitOpError({ operation: 'Stage', message: String(err) })
+    }
   }
 
   const handleStageAll = async () => {
     if (!directory) return
-    await window.git.stageAll(directory)
-    onGitStatusRefresh?.()
+    try {
+      await window.git.stageAll(directory)
+      onGitStatusRefresh?.()
+    } catch (err) {
+      setGitOpError({ operation: 'Stage', message: String(err) })
+    }
   }
 
   const handleUnstage = async (filePath: string) => {
     if (!directory) return
-    await window.git.unstage(directory, filePath)
-    onGitStatusRefresh?.()
+    try {
+      await window.git.unstage(directory, filePath)
+      onGitStatusRefresh?.()
+    } catch (err) {
+      setGitOpError({ operation: 'Unstage', message: String(err) })
+    }
   }
 
   const handleCommit = async () => {
@@ -239,7 +299,11 @@ export function useSourceControlActions({
         setReplyText(prev => ({ ...prev, [commentId]: '' }))
         const comments = await window.gh.prComments(directory, prStatus.number)
         setPrComments(comments)
+      } else {
+        setGitOpError({ operation: 'Reply', message: result.error || 'Failed to post reply' })
       }
+    } catch (err) {
+      setGitOpError({ operation: 'Reply', message: String(err) })
     } finally {
       setIsSubmittingReply(null)
     }
@@ -251,6 +315,7 @@ export function useSourceControlActions({
     handleStageAll,
     handleUnstage,
     handleCommit,
+    handleCommitMerge,
     handleToggleCommit,
     handleReplyToComment,
     ...gitActions,

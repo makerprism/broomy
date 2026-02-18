@@ -6,6 +6,7 @@ interface UseLayoutKeyboardParams {
   isPanelVisible: (panelId: string) => boolean
   panels: Record<string, ReactNode>
   handleToggle: (panelId: string) => void
+  onSearchFiles?: () => void
 }
 
 export function useLayoutKeyboard({
@@ -13,6 +14,7 @@ export function useLayoutKeyboard({
   isPanelVisible,
   panels,
   handleToggle,
+  onSearchFiles,
 }: UseLayoutKeyboardParams) {
   const [flashedPanel, setFlashedPanel] = useState<string | null>(null)
   const flashTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -113,6 +115,14 @@ export function useLayoutKeyboard({
 
       if (!(e.metaKey || e.ctrlKey)) return
 
+      // Cmd/Ctrl+P — handle before textarea check since it's app-wide
+      if (e.key === 'p' || e.key === 'P') {
+        e.preventDefault()
+        e.stopImmediatePropagation()
+        onSearchFiles?.()
+        return
+      }
+
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
         return
       }
@@ -136,7 +146,7 @@ export function useLayoutKeyboard({
       window.removeEventListener('keydown', handleKeyDown, true)
       window.removeEventListener('app:toggle-panel', handleCustomToggle)
     }
-  }, [handleToggleByKey, handleCyclePanel])
+  }, [handleToggleByKey, handleCyclePanel, onSearchFiles])
 
   return {
     flashedPanel,

@@ -1,4 +1,5 @@
 import { basename } from 'path-browserify'
+import { useErrorStore } from './errors'
 import { PANEL_IDS, DEFAULT_TOOLBAR_PANELS } from '../panels/types'
 import type { Session, PanelVisibility, TerminalTabsState } from './sessions'
 import {
@@ -18,6 +19,7 @@ const DEFAULT_LAYOUT_SIZES = {
   userTerminalHeight: 192, // 12rem = 192px
   diffPanelWidth: 320, // 20rem = 320px
   reviewPanelWidth: 320,
+  tutorialPanelWidth: 320,
 }
 
 // Default panel visibility for new sessions
@@ -81,6 +83,31 @@ type StoreSet = (partial: Partial<{
   toolbarPanels: string[]
   globalPanelVisibility: PanelVisibility
 }>) => void
+
+export type DuplicateSessionResult = {
+  existingSessionId: string
+  existingSessionName: string
+  wasArchived: boolean
+}
+
+function handleDuplicateSession(
+  duplicate: Session,
+  get: StoreGet,
+  set: StoreSet,
+): DuplicateSessionResult {
+  const wasArchived = duplicate.isArchived
+  if (wasArchived) {
+    const { sessions, globalPanelVisibility, sidebarWidth, toolbarPanels } = get()
+    const updatedSessions = sessions.map((s) =>
+      s.id === duplicate.id ? { ...s, isArchived: false } : s
+    )
+    set({ sessions: updatedSessions, activeSessionId: duplicate.id })
+    debouncedSave(updatedSessions, globalPanelVisibility, sidebarWidth, toolbarPanels)
+  } else {
+    set({ activeSessionId: duplicate.id })
+  }
+  return { existingSessionId: duplicate.id, existingSessionName: duplicate.name, wasArchived }
+}
 
 export function createCoreActions(get: StoreGet, set: StoreSet) {
   const updateSessionBranch = (id: string, branch: string) => {
@@ -176,17 +203,29 @@ export function createCoreActions(get: StoreGet, set: StoreSet) {
         })
       } catch (err) {
         console.warn('[sessions] Failed to load sessions config:', err)
+        useErrorStore.getState().addError('Failed to load session config')
         set({ sessions: [], activeSessionId: null, isLoading: false })
       }
     },
 
-    addSession: async (directory: string, agentId: string | null, extra?: { repoId?: string; issueNumber?: number; issueTitle?: string; name?: string; sessionType?: 'default' | 'review'; prNumber?: number; prTitle?: string; prUrl?: string; prBaseBranch?: string }) => {
+    addSession: async (directory: string, agentId: string | null, extra?: { repoId?: string; issueNumber?: number; issueTitle?: string; name?: string; sessionType?: 'default' | 'review'; prNumber?: number; prTitle?: string; prUrl?: string; prBaseBranch?: string }): Promise<DuplicateSessionResult | undefined> => {
       const isGitRepo = await window.git.isGitRepo(directory)
       if (!isGitRepo) {
         throw new Error('Selected directory is not a git repository')
       }
 
       const branch = await window.git.getBranch(directory)
+
+      // Check for duplicate sessions (active or archived) for the same branch in the same repo
+      const existingSessions = get().sessions
+      const duplicate = existingSessions.find((s) =>
+        s.branch === branch &&
+        (s.directory === directory || (extra?.repoId && s.repoId === extra.repoId))
+      )
+      if (duplicate) {
+        return handleDuplicateSession(duplicate, get, set)
+      }
+
       let name = extra?.name || basename(directory)
       if (!extra?.name) {
         try {

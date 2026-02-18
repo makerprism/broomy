@@ -10,7 +10,7 @@
  * block that augments the Window interface so the renderer gets full type
  * safety without importing anything from this file.
  */
-import { contextBridge } from 'electron'
+import { contextBridge, ipcRenderer } from 'electron'
 
 // Re-export all types so existing imports from '../../preload/index' still work
 export type { FileEntry, GitFileStatus, GitStatusResult, SearchResult, ManagedRepo, GitHubIssue, GitHubPrStatus, GitHubPrComment, GitHubPrForReview, GitCommitInfo, WorktreeInfo, AgentData, LayoutSizesData, PanelVisibility, SessionData, ConfigData, ProfileData, ProfilesData, MenuItemDef, TsProjectContext } from './apis/types'
@@ -21,6 +21,20 @@ export type { GhApi } from './apis/gh'
 export type { ConfigApi, ProfilesApi, AgentsApi, ReposApi } from './apis/config'
 export type { ShellApi, DialogApi, AppApi } from './apis/shell'
 export type { MenuApi, TsApi } from './apis/menu'
+
+export type HelpMenuEvent = 'getting-started' | 'shortcuts' | 'reset-tutorial'
+
+export type HelpApi = {
+  onHelpMenu: (callback: (event: HelpMenuEvent) => void) => () => void
+}
+
+const helpApi: HelpApi = {
+  onHelpMenu: (callback) => {
+    const handler = (_event: Electron.IpcRendererEvent, menuEvent: HelpMenuEvent) => callback(menuEvent)
+    ipcRenderer.on('help:menu', handler)
+    return () => ipcRenderer.removeListener('help:menu', handler)
+  },
+}
 
 // Import types for Window interface augmentation
 import type { PtyApi } from './apis/pty'
@@ -55,6 +69,7 @@ contextBridge.exposeInMainWorld('shell', shellApi)
 contextBridge.exposeInMainWorld('profiles', profilesApi)
 contextBridge.exposeInMainWorld('agents', agentsApi)
 contextBridge.exposeInMainWorld('ts', tsApi)
+contextBridge.exposeInMainWorld('help', helpApi)
 
 declare global {
   interface Window {
@@ -72,5 +87,6 @@ declare global {
     profiles: ProfilesApi
     agents: AgentsApi
     ts: TsApi
+    help: HelpApi
   }
 }

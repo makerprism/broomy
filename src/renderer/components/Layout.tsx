@@ -14,8 +14,32 @@ import type { PanelDefinition } from '../panels'
 import { useDividerResize } from '../hooks/useDividerResize'
 import type { DividerType } from '../hooks/useDividerResize'
 import { useLayoutKeyboard } from '../hooks/useLayoutKeyboard'
+import { useAppBannerError } from '../hooks/useErrorBanners'
 import LayoutToolbar from './LayoutToolbar'
 import LayoutContentArea from './LayoutContentArea'
+import { ErrorBanner } from './ErrorBanner'
+
+// Divider component - wide hit area, visible line
+function Divider({ type, direction, draggingDivider, onMouseDown }: {
+  type: DividerType; direction: 'horizontal' | 'vertical'
+  draggingDivider: DividerType | null; onMouseDown: (type: DividerType) => (e: React.MouseEvent) => void
+}) {
+  return (
+    <div
+      onMouseDown={onMouseDown(type)}
+      className={`flex-shrink-0 group relative ${
+        direction === 'vertical' ? 'w-px cursor-col-resize' : 'h-px cursor-row-resize'
+      }`}
+    >
+      <div className={`absolute z-10 ${
+        direction === 'vertical' ? 'w-4 h-full -left-2 top-0' : 'h-4 w-full -top-2 left-0'
+      }`} />
+      <div className={`absolute transition-colors ${
+        draggingDivider === type ? 'bg-accent' : 'bg-[#4a4a4a] group-hover:bg-accent/70'
+      } ${direction === 'vertical' ? 'w-px h-full left-0 top-0' : 'h-px w-full top-0 left-0'}`} />
+    </div>
+  )
+}
 
 interface LayoutProps {
   // Panel content
@@ -36,6 +60,7 @@ interface LayoutProps {
   onTogglePanel: (panelId: string) => void
   onToggleGlobalPanel: (panelId: string) => void
   onOpenPanelPicker?: () => void
+  onSearchFiles?: () => void
 }
 
 export default function Layout({
@@ -53,9 +78,11 @@ export default function Layout({
   onTogglePanel,
   onToggleGlobalPanel,
   onOpenPanelPicker,
+  onSearchFiles,
 }: LayoutProps) {
   const [isDev, setIsDev] = useState(false)
   const { registry, toolbarPanels, getShortcutKey } = usePanelContext()
+  const appBannerError = useAppBannerError()
 
   // Check if we're in dev mode on mount
   useEffect(() => {
@@ -80,6 +107,7 @@ export default function Layout({
   const showAgentTerminal = isPanelVisible(PANEL_IDS.AGENT_TERMINAL)
   const showUserTerminal = isPanelVisible(PANEL_IDS.USER_TERMINAL)
   const showSettings = isPanelVisible(PANEL_IDS.SETTINGS)
+  const showTutorial = isPanelVisible(PANEL_IDS.TUTORIAL)
 
   // Handle toggle for any panel
   const handleToggle = useCallback((panelId: string) => {
@@ -109,6 +137,7 @@ export default function Layout({
     isPanelVisible,
     panels,
     handleToggle,
+    onSearchFiles,
   })
 
   // Get toolbar panels info with visibility status
@@ -125,29 +154,6 @@ export default function Layout({
       })
       .filter((p): p is PanelDefinition & { shortcutKey: string | null; isVisible: boolean } => p !== null)
   }, [registry, toolbarPanels, getShortcutKey, isPanelVisible])
-
-  // Divider component - wide hit area, visible line
-  const Divider = ({ type, direction }: { type: DividerType; direction: 'horizontal' | 'vertical' }) => (
-    <div
-      onMouseDown={handleMouseDown(type)}
-      className={`flex-shrink-0 group relative ${
-        direction === 'vertical'
-          ? 'w-px cursor-col-resize'
-          : 'h-px cursor-row-resize'
-      }`}
-    >
-      {/* Invisible wide hit area */}
-      <div className={`absolute z-10 ${
-        direction === 'vertical'
-          ? 'w-4 h-full -left-2 top-0'
-          : 'h-4 w-full -top-2 left-0'
-      }`} />
-      {/* Visible line - brighter on hover/drag */}
-      <div className={`absolute transition-colors ${
-        draggingDivider === type ? 'bg-accent' : 'bg-[#4a4a4a] group-hover:bg-accent/70'
-      } ${direction === 'vertical' ? 'w-px h-full left-0 top-0' : 'h-px w-full top-0 left-0'}`} />
-    </div>
-  )
 
   // Brief flash overlay shown when cycling panels with Ctrl+Tab
   const FlashOverlay = ({ panelId }: { panelId: string }) =>
@@ -168,6 +174,9 @@ export default function Layout({
         settingsPanelId={PANEL_IDS.SETTINGS}
       />
 
+      {/* App-level error banner */}
+      {appBannerError && <ErrorBanner error={appBannerError} />}
+
       {/* Main content area */}
       <div ref={mainContentRef} className="flex-1 flex min-h-0">
         {/* Sidebar */}
@@ -182,7 +191,7 @@ export default function Layout({
               <FlashOverlay panelId={PANEL_IDS.SIDEBAR} />
               {panels[PANEL_IDS.SIDEBAR]}
             </div>
-            <Divider type="sidebar" direction="vertical" />
+            <Divider type="sidebar" direction="vertical" draggingDivider={draggingDivider} onMouseDown={handleMouseDown} />
           </>
         )}
 
@@ -205,13 +214,13 @@ export default function Layout({
                 <div
                   data-panel-id={PANEL_IDS.EXPLORER}
                   tabIndex={-1}
-                  className="relative flex-shrink-0 bg-bg-secondary overflow-y-auto outline-none"
+                  className="relative flex-shrink-0 bg-bg-secondary overflow-hidden outline-none"
                   style={{ width: layoutSizes.explorerWidth }}
                 >
                   <FlashOverlay panelId={PANEL_IDS.EXPLORER} />
                   {panels[PANEL_IDS.EXPLORER]}
                 </div>
-                <Divider type="explorer" direction="vertical" />
+                <Divider type="explorer" direction="vertical" draggingDivider={draggingDivider} onMouseDown={handleMouseDown} />
               </>
             )}
 
@@ -227,7 +236,7 @@ export default function Layout({
                   <FlashOverlay panelId={PANEL_IDS.REVIEW} />
                   {panels[PANEL_IDS.REVIEW]}
                 </div>
-                <Divider type="review" direction="vertical" />
+                <Divider type="review" direction="vertical" draggingDivider={draggingDivider} onMouseDown={handleMouseDown} />
               </>
             )}
 
@@ -249,6 +258,22 @@ export default function Layout({
               draggingDivider={draggingDivider}
               handleMouseDown={handleMouseDown}
             />
+
+            {/* Tutorial panel (right side) - hidden when error */}
+            {!errorMessage && showTutorial && panels[PANEL_IDS.TUTORIAL] && (
+              <>
+                <Divider type="tutorial" direction="vertical" draggingDivider={draggingDivider} onMouseDown={handleMouseDown} />
+                <div
+                  data-panel-id={PANEL_IDS.TUTORIAL}
+                  tabIndex={-1}
+                  className="relative flex-shrink-0 bg-bg-secondary overflow-y-auto outline-none"
+                  style={{ width: layoutSizes.tutorialPanelWidth }}
+                >
+                  <FlashOverlay panelId={PANEL_IDS.TUTORIAL} />
+                  {panels[PANEL_IDS.TUTORIAL]}
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>

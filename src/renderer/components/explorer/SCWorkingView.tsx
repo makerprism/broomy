@@ -15,30 +15,155 @@ interface SCWorkingViewProps {
   commitMessage: string
   setCommitMessage: (msg: string) => void
   isCommitting: boolean
+  isMerging: boolean
   commitError: string | null
   commitErrorExpanded: boolean
   setCommitErrorExpanded: (expanded: boolean) => void
   setCommitError: (error: string | null) => void
   isSyncing: boolean
   onCommit: () => void
+  onCommitMerge: () => void
   onSync: () => void
+  onSyncWithMain: () => void
+  onPushNewBranch: (branchName: string) => void
   onStage: (filePath: string) => void
   onStageAll: () => void
   onUnstage: (filePath: string) => void
   onFileSelect?: (target: NavigationTarget) => void
   onOpenReview?: () => void
+  // PR and push to main
+  prStatus: { number: number; state: string } | null
+  hasWriteAccess: boolean
+  isPushingToMain: boolean
+  allowPushToMain: boolean
+  onCreatePr: () => void
+  onPushToMain: () => void
+  // Behind main
+  behindMainCount: number
+  isFetchingBehindMain: boolean
+  isSyncingWithMain: boolean
+}
+
+function SyncStatusContent({
+  ahead,
+  behind,
+  branchStatus,
+  branchBaseName,
+  hasNoTracking,
+  onOpenReview,
+  prStatus,
+  hasWriteAccess,
+  isPushingToMain,
+  allowPushToMain,
+  onCreatePr,
+  onPushToMain,
+}: {
+  ahead: number
+  behind: number
+  branchStatus?: BranchStatus
+  branchBaseName: string
+  hasNoTracking: boolean
+  onOpenReview?: () => void
+  prStatus: { number: number; state: string } | null
+  hasWriteAccess: boolean
+  isPushingToMain: boolean
+  allowPushToMain: boolean
+  onCreatePr: () => void
+  onPushToMain: () => void
+}) {
+  const hasRemoteChanges = ahead > 0 || behind > 0
+
+  if (hasRemoteChanges) {
+    return (
+      <div className="flex flex-col items-center gap-2">
+        {ahead > 0 && (
+          <div className="flex items-center gap-2 text-sm text-green-400">
+            <span className="text-lg">&uarr;</span>
+            <span className="font-medium">{ahead} commit{ahead !== 1 ? 's' : ''} to push</span>
+          </div>
+        )}
+        {behind > 0 && (
+          <div className="flex items-center gap-2 text-sm text-blue-400">
+            <span className="text-lg">&darr;</span>
+            <span className="font-medium">{behind} commit{behind !== 1 ? 's' : ''} to pull</span>
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  if (branchStatus && branchStatus !== 'in-progress') {
+    return (
+      <>
+        <BranchStatusCard status={branchStatus} />
+        {branchStatus === 'pushed' && !prStatus && (
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={onCreatePr}
+              className="px-2 py-1 text-xs rounded bg-accent text-white hover:bg-accent/80"
+            >
+              Create PR
+            </button>
+            {hasWriteAccess && allowPushToMain && (
+              <button
+                onClick={onPushToMain}
+                disabled={isPushingToMain}
+                className="px-2 py-1 text-xs rounded bg-bg-tertiary text-text-primary hover:bg-bg-secondary disabled:opacity-50"
+              >
+                {isPushingToMain ? 'Pushing...' : `Push to ${branchBaseName}`}
+              </button>
+            )}
+          </div>
+        )}
+        {(branchStatus === 'open' || branchStatus === 'pushed') && onOpenReview && (
+          <button
+            onClick={onOpenReview}
+            className="px-4 py-1.5 text-xs rounded bg-purple-600 text-white hover:bg-purple-500 transition-colors"
+          >
+            Get AI Review
+          </button>
+        )}
+      </>
+    )
+  }
+
+  if (hasNoTracking) {
+    return (
+      <div className="flex flex-col items-center gap-2">
+        <div className="text-sm text-text-secondary">Up to date</div>
+        <div className="text-xs text-yellow-400">No remote tracking branch</div>
+      </div>
+    )
+  }
+
+  return <div className="text-sm text-text-secondary">Up to date</div>
 }
 
 function SyncView({
   syncStatus,
   branchStatus,
+  branchBaseName,
   isSyncing,
   onSync,
+  onSyncWithMain,
+  onPushNewBranch,
   onOpenReview,
-}: Pick<SCWorkingViewProps, 'syncStatus' | 'branchStatus' | 'isSyncing' | 'onSync' | 'onOpenReview'>) {
+  prStatus,
+  hasWriteAccess,
+  isPushingToMain,
+  allowPushToMain,
+  onCreatePr,
+  onPushToMain,
+  behindMainCount,
+  isFetchingBehindMain,
+  isSyncingWithMain,
+}: Pick<SCWorkingViewProps, 'syncStatus' | 'branchStatus' | 'branchBaseName' | 'isSyncing' | 'onSync' | 'onSyncWithMain' | 'onPushNewBranch' | 'onOpenReview' | 'prStatus' | 'hasWriteAccess' | 'isPushingToMain' | 'allowPushToMain' | 'onCreatePr' | 'onPushToMain' | 'behindMainCount' | 'isFetchingBehindMain' | 'isSyncingWithMain'>) {
   const ahead = syncStatus?.ahead ?? 0
   const behind = syncStatus?.behind ?? 0
   const hasRemoteChanges = ahead > 0 || behind > 0
+  const currentBranch = syncStatus?.current ?? ''
+  const isOnMainBranch = currentBranch === 'main' || currentBranch === 'master'
+  const hasNoTracking = !syncStatus?.tracking && !isOnMainBranch && !!currentBranch
 
   return (
     <div className="flex-1 flex flex-col items-center justify-center gap-4 p-4">
@@ -48,36 +173,20 @@ function SyncView({
         </div>
       )}
 
-      {hasRemoteChanges ? (
-        <div className="flex flex-col items-center gap-2">
-          {ahead > 0 && (
-            <div className="flex items-center gap-2 text-sm text-green-400">
-              <span className="text-lg">&uarr;</span>
-              <span className="font-medium">{ahead} commit{ahead !== 1 ? 's' : ''} to push</span>
-            </div>
-          )}
-          {behind > 0 && (
-            <div className="flex items-center gap-2 text-sm text-blue-400">
-              <span className="text-lg">&darr;</span>
-              <span className="font-medium">{behind} commit{behind !== 1 ? 's' : ''} to pull</span>
-            </div>
-          )}
-        </div>
-      ) : branchStatus && branchStatus !== 'in-progress' ? (
-        <>
-          <BranchStatusCard status={branchStatus} />
-          {(branchStatus === 'open' || branchStatus === 'pushed') && onOpenReview && (
-            <button
-              onClick={onOpenReview}
-              className="px-4 py-1.5 text-xs rounded bg-purple-600 text-white hover:bg-purple-500 transition-colors"
-            >
-              Get AI Review
-            </button>
-          )}
-        </>
-      ) : (
-        <div className="text-sm text-text-secondary">Up to date</div>
-      )}
+      <SyncStatusContent
+        ahead={ahead}
+        behind={behind}
+        branchStatus={branchStatus}
+        branchBaseName={branchBaseName}
+        hasNoTracking={hasNoTracking}
+        onOpenReview={onOpenReview}
+        prStatus={prStatus}
+        hasWriteAccess={hasWriteAccess}
+        isPushingToMain={isPushingToMain}
+        allowPushToMain={allowPushToMain}
+        onCreatePr={onCreatePr}
+        onPushToMain={onPushToMain}
+      />
 
       {syncStatus?.tracking && branchStatus !== 'merged' && (
         <button
@@ -92,50 +201,68 @@ function SyncView({
           {isSyncing ? 'Syncing...' : 'Sync Changes'}
         </button>
       )}
+
+      {hasNoTracking && (
+        <button
+          onClick={() => onPushNewBranch(currentBranch)}
+          disabled={isSyncing}
+          className="px-4 py-1.5 text-xs rounded bg-accent text-white hover:bg-accent/80 disabled:opacity-50"
+        >
+          {isSyncing ? 'Pushing...' : 'Push Branch to Remote'}
+        </button>
+      )}
+
+      <BehindMainBanner
+        branchStatus={branchStatus}
+        branchBaseName={branchBaseName}
+        behindMainCount={behindMainCount}
+        isFetchingBehindMain={isFetchingBehindMain}
+        isSyncingWithMain={isSyncingWithMain}
+        onSyncWithMain={onSyncWithMain}
+      />
     </div>
   )
 }
 
-export function SCWorkingView({
-  directory,
-  gitStatus,
-  syncStatus,
-  branchStatus,
-  stagedFiles,
-  unstagedFiles,
-  commitMessage,
-  setCommitMessage,
-  isCommitting,
-  commitError,
-  commitErrorExpanded,
-  setCommitErrorExpanded,
-  setCommitError,
-  isSyncing,
-  onCommit,
-  onSync,
-  onStage,
-  onStageAll,
-  onUnstage,
-  onFileSelect,
-  onOpenReview,
-}: SCWorkingViewProps) {
-  if (gitStatus.length === 0) {
-    return (
-      <SyncView
-        syncStatus={syncStatus}
-        branchStatus={branchStatus}
-        isSyncing={isSyncing}
-        onSync={onSync}
-        onOpenReview={onOpenReview}
-      />
-    )
-  }
+function BehindMainBanner({ branchStatus, branchBaseName, behindMainCount, isFetchingBehindMain, isSyncingWithMain, onSyncWithMain }: {
+  branchStatus?: BranchStatus
+  branchBaseName: string
+  behindMainCount: number
+  isFetchingBehindMain: boolean
+  isSyncingWithMain: boolean
+  onSyncWithMain: () => void
+}) {
+  if (isFetchingBehindMain || behindMainCount === 0) return null
+  if (branchStatus !== 'pushed' && branchStatus !== 'empty') return null
 
-  // Has changes: show commit view
   return (
-    <>
-      {/* Commit area */}
-      <div className="px-3 py-2 border-b border-border">
+    <div className="flex flex-col items-center gap-2 mt-2">
+      <div className="text-xs text-text-secondary">
+        {branchBaseName} has {behindMainCount} new commit{behindMainCount !== 1 ? 's' : ''}
+      </div>
+      <button
+        onClick={onSyncWithMain}
+        disabled={isSyncingWithMain}
+        className="px-4 py-1.5 text-xs rounded bg-bg-tertiary text-text-primary hover:bg-bg-secondary disabled:opacity-50"
+      >
+        {isSyncingWithMain ? 'Syncing...' : `Get latest from ${branchBaseName}`}
+      </button>
+    </div>
+  )
+}
+
+function CommitArea({ isMerging, isCommitting, commitMessage, setCommitMessage, onCommit, onCommitMerge, onStageAll, gitStatus, unstagedFiles, commitError, commitErrorExpanded, setCommitErrorExpanded, setCommitError }: Pick<SCWorkingViewProps, 'isMerging' | 'isCommitting' | 'commitMessage' | 'setCommitMessage' | 'onCommit' | 'onCommitMerge' | 'onStageAll' | 'gitStatus' | 'unstagedFiles' | 'commitError' | 'commitErrorExpanded' | 'setCommitErrorExpanded' | 'setCommitError'>) {
+  return (
+    <div className="px-3 py-2 border-b border-border">
+      {isMerging ? (
+        <button
+          onClick={onCommitMerge}
+          disabled={isCommitting}
+          className="w-full px-2 py-1.5 text-xs rounded bg-accent text-white hover:bg-accent/80 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {isCommitting ? 'Committing...' : 'Commit Merge'}
+        </button>
+      ) : (
         <div className="flex items-center gap-1">
           <input
             type="text"
@@ -168,24 +295,107 @@ export function SCWorkingView({
             &#x22EF;
           </button>
         </div>
-        {commitError && (
-          <div className="mt-1 flex items-start gap-1 bg-red-500/10 border border-red-500/30 rounded px-2 py-1">
-            <div
-              className="flex-1 text-xs text-red-400 cursor-pointer"
-              onClick={() => setCommitErrorExpanded(!commitErrorExpanded)}
-            >
-              {commitErrorExpanded ? commitError : (commitError.length > 80 ? `${commitError.slice(0, 80)  }...` : commitError)}
-            </div>
-            <button
-              onClick={() => setCommitError(null)}
-              className="text-red-400 hover:text-red-300 text-xs shrink-0 px-1"
-              title="Dismiss"
-            >
-              x
-            </button>
+      )}
+      {commitError && (
+        <div className="mt-1 flex items-start gap-1 bg-red-500/10 border border-red-500/30 rounded px-2 py-1">
+          <div
+            className="flex-1 text-xs text-red-400 cursor-pointer"
+            onClick={() => setCommitErrorExpanded(!commitErrorExpanded)}
+          >
+            {commitErrorExpanded ? commitError : (commitError.length > 80 ? `${commitError.slice(0, 80)  }...` : commitError)}
           </div>
-        )}
-      </div>
+          <button
+            onClick={() => setCommitError(null)}
+            className="text-red-400 hover:text-red-300 text-xs shrink-0 px-1"
+            title="Dismiss"
+          >
+            x
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+export function SCWorkingView({
+  directory,
+  gitStatus,
+  syncStatus,
+  branchStatus,
+  branchBaseName,
+  stagedFiles,
+  unstagedFiles,
+  commitMessage,
+  setCommitMessage,
+  isCommitting,
+  isMerging,
+  commitError,
+  commitErrorExpanded,
+  setCommitErrorExpanded,
+  setCommitError,
+  isSyncing,
+  onCommit,
+  onCommitMerge,
+  onSync,
+  onSyncWithMain,
+  onPushNewBranch,
+  onStage,
+  onStageAll,
+  onUnstage,
+  onFileSelect,
+  onOpenReview,
+  prStatus,
+  hasWriteAccess,
+  isPushingToMain,
+  allowPushToMain,
+  onCreatePr,
+  onPushToMain,
+  behindMainCount,
+  isFetchingBehindMain,
+  isSyncingWithMain,
+}: SCWorkingViewProps) {
+  if (gitStatus.length === 0) {
+    return (
+      <SyncView
+        syncStatus={syncStatus}
+        branchStatus={branchStatus}
+        branchBaseName={branchBaseName}
+        isSyncing={isSyncing}
+        onSync={onSync}
+        onSyncWithMain={onSyncWithMain}
+        onPushNewBranch={onPushNewBranch}
+        onOpenReview={onOpenReview}
+        prStatus={prStatus}
+        hasWriteAccess={hasWriteAccess}
+        isPushingToMain={isPushingToMain}
+        allowPushToMain={allowPushToMain}
+        onCreatePr={onCreatePr}
+        onPushToMain={onPushToMain}
+        behindMainCount={behindMainCount}
+        isFetchingBehindMain={isFetchingBehindMain}
+        isSyncingWithMain={isSyncingWithMain}
+      />
+    )
+  }
+
+  // Has changes: show commit view
+  return (
+    <>
+      <CommitArea
+        isMerging={isMerging}
+        isCommitting={isCommitting}
+        commitMessage={commitMessage}
+        setCommitMessage={setCommitMessage}
+        onCommit={onCommit}
+        onCommitMerge={onCommitMerge}
+        onStageAll={onStageAll}
+        gitStatus={gitStatus}
+        unstagedFiles={unstagedFiles}
+        commitError={commitError}
+        commitErrorExpanded={commitErrorExpanded}
+        setCommitErrorExpanded={setCommitErrorExpanded}
+        setCommitError={setCommitError}
+      />
 
       <div className="flex-1 overflow-y-auto text-sm">
         {/* Staged Changes */}

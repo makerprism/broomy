@@ -184,7 +184,3 @@ Config files are stored at `~/.broomy/`:
 ## License
 
 MIT
-
-
-## Extra
-This PR has not been merged.

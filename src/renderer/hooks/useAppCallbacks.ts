@@ -4,13 +4,14 @@ import { useErrorStore } from '../store/errors'
 import { PANEL_IDS } from '../panels'
 import type { AgentConfig } from '../store/agents'
 import type { PrState } from '../utils/branchStatus'
+import type { DuplicateSessionResult } from '../store/sessionCoreActions'
 
 interface AppCallbacksDeps {
   sessions: Session[]
   activeSessionId: string | null
   agents: AgentConfig[]
   repos: { id: string; rootDir: string; defaultBranch: string }[]
-  addSession: (directory: string, agentId: string | null, extra?: { repoId?: string; issueNumber?: number; issueTitle?: string; name?: string; sessionType?: 'default' | 'review'; prNumber?: number; prTitle?: string; prUrl?: string; prBaseBranch?: string }) => Promise<void>
+  addSession: (directory: string, agentId: string | null, extra?: { repoId?: string; issueNumber?: number; issueTitle?: string; name?: string; sessionType?: 'default' | 'review'; prNumber?: number; prTitle?: string; prUrl?: string; prBaseBranch?: string }) => Promise<DuplicateSessionResult | undefined>
   removeSession: (id: string) => void
   setActiveSession: (id: string | null) => void
   togglePanel: (sessionId: string, panelId: string) => void
@@ -18,6 +19,7 @@ interface AppCallbacksDeps {
   setFileViewerPosition: (id: string, position: 'top' | 'left') => void
   updatePrState: (sessionId: string, prState: PrState, prNumber?: number, prUrl?: string) => void
   setShowNewSessionDialog: (show: boolean) => void
+  onSessionAlreadyExists?: (info: { name: string; wasArchived: boolean }) => void
 }
 
 export function useAppCallbacks({
@@ -33,6 +35,7 @@ export function useAppCallbacks({
   setFileViewerPosition,
   updatePrState,
   setShowNewSessionDialog,
+  onSessionAlreadyExists,
 }: AppCallbacksDeps) {
   const { addError } = useErrorStore()
 
@@ -46,12 +49,15 @@ export function useAppCallbacks({
     extra?: { repoId?: string; issueNumber?: number; issueTitle?: string; name?: string; sessionType?: 'default' | 'review'; prNumber?: number; prTitle?: string; prUrl?: string; prBaseBranch?: string }
   ) => {
     try {
-      await addSession(directory, agentId, extra)
+      const result = await addSession(directory, agentId, extra)
+      if (result) {
+        onSessionAlreadyExists?.({ name: result.existingSessionName, wasArchived: result.wasArchived })
+      }
     } catch (error) {
       addError(`Failed to add session: ${error instanceof Error ? error.message : String(error)}`)
     }
     setShowNewSessionDialog(false)
-  }, [addSession, addError, setShowNewSessionDialog])
+  }, [addSession, addError, setShowNewSessionDialog, onSessionAlreadyExists])
 
   const handleCancelNewSession = useCallback(() => {
     setShowNewSessionDialog(false)
@@ -108,25 +114,36 @@ export function useAppCallbacks({
     })
   }, [setActiveSession])
 
-  const handleDeleteSession = useCallback(async (id: string, deleteWorktree: boolean) => {
-    if (deleteWorktree) {
-      const session = sessions.find(s => s.id === id)
-      if (session?.repoId) {
-        const repo = repos.find(r => r.id === session.repoId)
-        if (repo) {
-          const mainDir = `${repo.rootDir}/${repo.defaultBranch}`
-          const removeResult = await window.git.worktreeRemove(mainDir, session.directory)
-          if (!removeResult.success) {
-            addError(`Failed to remove worktree: ${removeResult.error}`)
+  const handleDeleteSession = useCallback((id: string, deleteWorktree: boolean) => {
+    // Remove session immediately for responsive UI
+    const session = sessions.find(s => s.id === id)
+    removeSession(id)
+
+    // Clean up worktree and branch in background (non-blocking)
+    if (deleteWorktree && session?.repoId) {
+      const repo = repos.find(r => r.id === session.repoId)
+      if (repo) {
+        const mainDir = `${repo.rootDir}/${repo.defaultBranch}`
+        void (async () => {
+          try {
+            const removeResult = await window.git.worktreeRemove(mainDir, session.directory)
+            if (!removeResult.success) {
+              addError(`Failed to remove worktree: ${removeResult.error}`)
+            }
+          } catch (error) {
+            addError(`Failed to remove worktree: ${error instanceof Error ? error.message : String(error)}`)
           }
-          const branchResult = await window.git.deleteBranch(mainDir, session.branch)
-          if (!branchResult.success) {
-            addError(`Failed to delete branch: ${branchResult.error}`)
+          try {
+            const branchResult = await window.git.deleteBranch(mainDir, session.branch)
+            if (!branchResult.success) {
+              addError(`Failed to delete branch: ${branchResult.error}`)
+            }
+          } catch (error) {
+            addError(`Failed to delete branch: ${error instanceof Error ? error.message : String(error)}`)
           }
-        }
+        })()
       }
     }
-    removeSession(id)
   }, [sessions, repos, removeSession, addError])
 
   const handleTogglePanel = useCallback((panelId: string) => {

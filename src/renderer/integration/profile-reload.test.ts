@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import '../../test/setup'
+import { allowConsoleError, allowConsoleWarn } from '../../test/console-guard'
 import { useSessionStore } from '../store/sessions'
 import { useAgentStore } from '../store/agents'
 import { useRepoStore } from '../store/repos'
@@ -116,6 +117,8 @@ describe('Profile reload integration', () => {
   })
 
   it('config.load failure gives safe defaults for all stores', async () => {
+    allowConsoleError()
+    allowConsoleWarn()
     vi.mocked(window.config.load).mockRejectedValue(new Error('Corrupt config'))
     vi.mocked(window.app.homedir).mockResolvedValue('/Users/test')
 

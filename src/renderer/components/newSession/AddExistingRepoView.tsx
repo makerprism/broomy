@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useAgentStore } from '../../store/agents'
 import { useRepoStore } from '../../store/repos'
+import { DialogErrorBanner } from '../ErrorBanner'
 
 async function validateWorktreeFolder(folder: string): Promise<{ worktrees: { path: string; branch: string }[]; error?: string }> {
   try {
@@ -126,7 +127,7 @@ export function AddExistingRepoView({
         // gh CLI not available or other error - default to false
       }
 
-      await addRepo({
+      addRepo({
         name: repoName || rootDir.split('/').pop() || 'unknown',
         remoteUrl,
         rootDir,
@@ -241,7 +242,7 @@ export function AddExistingRepoView({
         )}
 
         {error && (
-          <div className="text-xs text-red-400 bg-red-400/10 rounded px-3 py-2 whitespace-pre-wrap">{error}</div>
+          <DialogErrorBanner error={error} onDismiss={() => setError(null)} />
         )}
       </div>
 
