@@ -113,6 +113,7 @@ export default function FileViewer({ filePath, position = 'top', onPositionChang
       <FileViewerToolbar
         fileName={fileName}
         filePath={filePath}
+        directory={directory}
         isDirty={viewer.isDirty}
         isSaving={viewer.isSaving}
         viewMode={viewer.viewMode}
