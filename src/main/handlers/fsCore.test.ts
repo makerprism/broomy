@@ -430,14 +430,19 @@ describe('fsCore handlers', () => {
   })
 
   describe('fs:watch', () => {
-    it('returns success in E2E mode', () => {
+    beforeEach(() => {
+      // Default: readdir returns empty array so watchRecursive doesn't recurse into subdirs
+      vi.mocked(readdir).mockResolvedValue([] as never)
+    })
+
+    it('returns success in E2E mode', async () => {
       const handlers = setupHandlers(createMockCtx({ isE2ETest: true }))
       const event = { sender: {} }
-      const result = handlers['fs:watch'](event, 'watch-1', '/dir')
+      const result = await handlers['fs:watch'](event, 'watch-1', '/dir')
       expect(result).toEqual({ success: true })
     })
 
-    it('sets up a file watcher in normal mode', () => {
+    it('sets up a file watcher in normal mode', async () => {
       const mockWatcher = { on: vi.fn(), close: vi.fn() }
       vi.mocked(watch).mockReturnValue(mockWatcher as never)
       vi.mocked(BrowserWindow.fromWebContents).mockReturnValue({ isDestroyed: () => false, webContents: { send: vi.fn() } } as never)
@@ -445,7 +450,7 @@ describe('fsCore handlers', () => {
       const ctx = createMockCtx()
       const handlers = setupHandlers(ctx)
       const event = { sender: {} }
-      const result = handlers['fs:watch'](event, 'watch-1', '/dir')
+      const result = await handlers['fs:watch'](event, 'watch-1', '/dir')
       expect(result).toEqual({ success: true })
       expect(ctx.fileWatchers.has('watch-1')).toBe(true)
     })
@@ -465,7 +470,7 @@ describe('fsCore handlers', () => {
       expect(oldWatcher.close).toHaveBeenCalled()
     })
 
-    it('sends fs:change events through watcher callback', () => {
+    it('sends fs:change events through watcher callback', async () => {
       let watchCallback: (eventType: string, filename: string | null) => void = () => {}
       const mockWatcher = { on: vi.fn(), close: vi.fn() }
       vi.mocked(watch).mockImplementation(((_path: string, _opts: unknown, cb: unknown) => {
@@ -479,14 +484,14 @@ describe('fsCore handlers', () => {
       const ctx = createMockCtx()
       const handlers = setupHandlers(ctx)
       const event = { sender: {} }
-      handlers['fs:watch'](event, 'watch-1', '/dir')
+      await handlers['fs:watch'](event, 'watch-1', '/dir')
 
       // Normal file change should send event
       watchCallback('change', 'src/file.ts')
       expect(mockSend).toHaveBeenCalledWith('fs:change:watch-1', { eventType: 'change', filename: 'src/file.ts' })
     })
 
-    it('ignores .git file changes in watcher callback', () => {
+    it('ignores .git file changes in watcher callback', async () => {
       let watchCallback: (eventType: string, filename: string | null) => void = () => {}
       const mockWatcher = { on: vi.fn(), close: vi.fn() }
       vi.mocked(watch).mockImplementation(((_path: string, _opts: unknown, cb: unknown) => {
@@ -500,13 +505,13 @@ describe('fsCore handlers', () => {
       const ctx = createMockCtx()
       const handlers = setupHandlers(ctx)
       const event = { sender: {} }
-      handlers['fs:watch'](event, 'watch-1', '/dir')
+      await handlers['fs:watch'](event, 'watch-1', '/dir')
 
       watchCallback('change', '.git/HEAD')
       expect(mockSend).not.toHaveBeenCalled()
     })
 
-    it('uses mainWindow when owner window is not available', () => {
+    it('uses mainWindow when owner window is not available', async () => {
       let watchCallback: (eventType: string, filename: string | null) => void = () => {}
       const mockWatcher = { on: vi.fn(), close: vi.fn() }
       vi.mocked(watch).mockImplementation(((_path: string, _opts: unknown, cb: unknown) => {
@@ -520,13 +525,13 @@ describe('fsCore handlers', () => {
       const ctx = createMockCtx({ mainWindow: mainWindow as never })
       const handlers = setupHandlers(ctx)
       const event = { sender: {} }
-      handlers['fs:watch'](event, 'watch-1', '/dir')
+      await handlers['fs:watch'](event, 'watch-1', '/dir')
 
       watchCallback('change', 'file.ts')
       expect(mockSend).toHaveBeenCalledWith('fs:change:watch-1', { eventType: 'change', filename: 'file.ts' })
     })
 
-    it('handles watcher error by removing from map', () => {
+    it('handles watcher error by removing from map', async () => {
       allowConsoleError()
       const mockWatcher = { on: vi.fn(), close: vi.fn() }
       vi.mocked(watch).mockReturnValue(mockWatcher as never)
@@ -535,7 +540,7 @@ describe('fsCore handlers', () => {
       const ctx = createMockCtx()
       const handlers = setupHandlers(ctx)
       const event = { sender: {} }
-      handlers['fs:watch'](event, 'watch-1', '/dir')
+      await handlers['fs:watch'](event, 'watch-1', '/dir')
       expect(ctx.fileWatchers.has('watch-1')).toBe(true)
 
       // Trigger the error handler
@@ -544,14 +549,14 @@ describe('fsCore handlers', () => {
       expect(ctx.fileWatchers.has('watch-1')).toBe(false)
     })
 
-    it('returns error when watch throws', () => {
+    it('returns error when watch throws', async () => {
       allowConsoleError()
       vi.mocked(watch).mockImplementation(() => { throw new Error('watch failed') })
       vi.mocked(BrowserWindow.fromWebContents).mockReturnValue(null)
 
       const handlers = setupHandlers()
       const event = { sender: {} }
-      const result = handlers['fs:watch'](event, 'watch-1', '/bad/dir')
+      const result = await handlers['fs:watch'](event, 'watch-1', '/bad/dir')
       expect(result).toEqual({ success: false, error: expect.stringContaining('watch failed') })
     })
   })

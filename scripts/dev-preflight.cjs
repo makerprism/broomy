@@ -117,29 +117,36 @@ async function main() {
     const nodePtyDir = path.join(ROOT, 'node_modules', 'node-pty')
     if (!fs.existsSync(nodePtyDir)) return 'node-pty missing'
 
-    // Check for prebuilds or build directory
-    const hasPrebuilds = fs.existsSync(path.join(nodePtyDir, 'prebuilds'))
-    const hasBuild = fs.existsSync(path.join(nodePtyDir, 'build'))
-    if (!hasPrebuilds && !hasBuild) return 'no prebuilds or build'
+    // Check for a loadable pty.node binary for the current platform/arch.
+    // node-pty looks in build/Release, build/Debug, and prebuilds/<platform>-<arch>.
+    const platformDir = `${process.platform}-${process.arch}`
+    const candidates = [
+      path.join(nodePtyDir, 'build', 'Release', 'pty.node'),
+      path.join(nodePtyDir, 'build', 'Debug', 'pty.node'),
+      path.join(nodePtyDir, 'prebuilds', platformDir, 'pty.node'),
+    ]
+    const hasBinary = candidates.some(p => fs.existsSync(p))
+    if (!hasBinary) return `no pty.node binary for ${platformDir}`
 
-    // On macOS/Linux, check spawn-helper is executable
-    if (process.platform !== 'win32' && hasPrebuilds) {
-      const platformPrefix = process.platform === 'darwin' ? 'darwin' : 'linux'
-      try {
-        const prebuildsDir = path.join(nodePtyDir, 'prebuilds')
-        const dirs = fs.readdirSync(prebuildsDir).filter(d => d.startsWith(platformPrefix))
-        for (const dir of dirs) {
-          const helper = path.join(prebuildsDir, dir, 'spawn-helper')
-          if (fs.existsSync(helper)) {
-            try {
-              fs.accessSync(helper, fs.constants.X_OK)
-            } catch {
-              return 'spawn-helper not executable'
+    // On macOS/Linux, check spawn-helper is executable in the platform prebuild dir
+    if (process.platform !== 'win32') {
+      const prebuildsDir = path.join(nodePtyDir, 'prebuilds')
+      if (fs.existsSync(prebuildsDir)) {
+        try {
+          const dirs = fs.readdirSync(prebuildsDir).filter(d => d.startsWith(process.platform))
+          for (const dir of dirs) {
+            const helper = path.join(prebuildsDir, dir, 'spawn-helper')
+            if (fs.existsSync(helper)) {
+              try {
+                fs.accessSync(helper, fs.constants.X_OK)
+              } catch {
+                return 'spawn-helper not executable'
+              }
             }
           }
+        } catch {
+          // Ignore read errors
         }
-      } catch {
-        // Ignore read errors
       }
     }
 

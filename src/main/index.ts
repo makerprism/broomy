@@ -14,10 +14,10 @@ import { app, BrowserWindow, ipcMain, Menu, shell, dialog } from 'electron'
 import pkg from 'electron-updater'
 const { autoUpdater } = pkg
 import { join } from 'path'
-import { existsSync, readFileSync, FSWatcher } from 'fs'
+import { existsSync, readFileSync } from 'fs'
 import * as pty from 'node-pty'
 import { isWindows, isMac } from './platform'
-import { registerAllHandlers, HandlerContext, PROFILES_FILE } from './handlers'
+import { registerAllHandlers, HandlerContext, PROFILES_FILE, Watcher } from './handlers'
 import { resolveShellEnv } from './shellEnv'
 
 // Ensure app name is correct (in dev mode Electron defaults to "Electron")
@@ -38,7 +38,7 @@ const isScreenshotMode = process.env.SCREENSHOT_MODE === 'true'
 // PTY instances map
 const ptyProcesses = new Map<string, pty.IPty>()
 // File watchers map
-const fileWatchers = new Map<string, FSWatcher>()
+const fileWatchers = new Map<string, Watcher>()
 // Track windows by profileId
 const profileWindows = new Map<string, BrowserWindow>()
 // Track which window owns each PTY

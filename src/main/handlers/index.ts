@@ -22,5 +22,5 @@ export function registerAllHandlers(ipcMain: IpcMain, ctx: HandlerContext): void
   updaterHandlers.register(ipcMain, ctx)
 }
 
-export type { HandlerContext } from './types'
+export type { HandlerContext, Watcher } from './types'
 export { PROFILES_FILE } from './types'

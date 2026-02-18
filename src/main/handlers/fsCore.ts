@@ -1,9 +1,70 @@
 import { BrowserWindow, IpcMain, IpcMainInvokeEvent } from 'electron'
-import { watch } from 'fs'
+import { watch, FSWatcher } from 'fs'
 import { readdir, readFile, writeFile, appendFile, stat, mkdir, rm, access } from 'fs/promises'
 import { join } from 'path'
 import { normalizePath } from '../platform'
-import { HandlerContext } from './types'
+import { HandlerContext, Watcher } from './types'
+
+// fs.watch({ recursive: true }) is only available on macOS and Windows in Node.js < v22.5.
+// On Linux (Electron 28 / Node 18) we manually watch every subdirectory.
+async function watchRecursive(
+  dirPath: string,
+  callback: (eventType: string, filename: string | null) => void,
+  onError?: (error: Error) => void
+): Promise<Watcher> {
+  const supportsRecursive = process.platform === 'darwin' || process.platform === 'win32'
+
+  if (supportsRecursive) {
+    const watcher = watch(dirPath, { recursive: true }, callback)
+    if (onError) {
+      watcher.on('error', onError)
+    }
+    return watcher
+  }
+
+  // Linux fallback: collect all subdirectories and watch each one.
+  const watchers: FSWatcher[] = []
+
+  async function watchDir(dir: string) {
+    // This may throw for the root dir (propagates to handleWatch's catch).
+    // For subdirectories, callers wrap this in try/catch.
+    const watcher = watch(dir, {}, (eventType, filename) => {
+      // Compute path relative to the root dirPath so callers get consistent filenames.
+      const relativePart = dir === dirPath ? '' : dir.slice(dirPath.length + 1)
+      const full = relativePart ? `${relativePart}/${filename}` : filename
+      callback(eventType, full)
+    })
+    if (onError) {
+      watcher.on('error', onError)
+    }
+    watchers.push(watcher)
+
+    try {
+      const entries = await readdir(dir, { withFileTypes: true })
+      for (const entry of entries) {
+        if (entry.isDirectory()) {
+          try {
+            await watchDir(join(dir, entry.name))
+          } catch {
+            // Subdirectory may have been removed; ignore.
+          }
+        }
+      }
+    } catch {
+      // Ignore read errors for directories we can't access.
+    }
+  }
+
+  await watchDir(dirPath)
+
+  return {
+    close() {
+      for (const w of watchers) {
+        try { w.close() } catch { /* ignore */ }
+      }
+    },
+  }
+}
 
 async function handleReadDir(ctx: HandlerContext, dirPath: string) {
   if (ctx.isE2ETest) {
@@ -315,7 +376,7 @@ async function handleReadFileBase64(ctx: HandlerContext, filePath: string) {
   return buffer.toString('base64')
 }
 
-function handleWatch(ctx: HandlerContext, _event: IpcMainInvokeEvent, id: string, dirPath: string) {
+async function handleWatch(ctx: HandlerContext, _event: IpcMainInvokeEvent, id: string, dirPath: string) {
   if (ctx.isE2ETest) {
     return { success: true }
   }
@@ -332,21 +393,23 @@ function handleWatch(ctx: HandlerContext, _event: IpcMainInvokeEvent, id: string
   }
 
   try {
-    const watcher = watch(dirPath, { recursive: true }, (eventType, filename) => {
-      if (filename?.startsWith('.git')) return
+    const watcher = await watchRecursive(
+      dirPath,
+      (eventType, filename) => {
+        if (filename?.startsWith('.git')) return
 
-      const ownerWindow = ctx.watcherOwnerWindows.get(id) || ctx.mainWindow
-      if (ownerWindow && !ownerWindow.isDestroyed()) {
-        ownerWindow.webContents.send(`fs:change:${id}`, { eventType, filename })
+        const ownerWindow = ctx.watcherOwnerWindows.get(id) || ctx.mainWindow
+        if (ownerWindow && !ownerWindow.isDestroyed()) {
+          ownerWindow.webContents.send(`fs:change:${id}`, { eventType, filename })
+        }
+      },
+      (error) => {
+        console.error('File watcher error:', error)
+        ctx.fileWatchers.delete(id)
       }
-    })
+    )
 
     ctx.fileWatchers.set(id, watcher)
-
-    watcher.on('error', (error) => {
-      console.error('File watcher error:', error)
-      ctx.fileWatchers.delete(id)
-    })
 
     return { success: true }
   } catch (error) {

@@ -1,9 +1,12 @@
 import type { BrowserWindow } from 'electron'
 import type { IPty } from 'node-pty'
-import type { FSWatcher } from 'fs'
 import { join } from 'path'
 import { homedir, tmpdir } from 'os'
 import { normalizePath } from '../platform'
+
+export interface Watcher {
+  close(): void
+}
 
 export interface HandlerContext {
   isE2ETest: boolean
@@ -12,7 +15,7 @@ export interface HandlerContext {
   isWindows: boolean
   ptyProcesses: Map<string, IPty>
   ptyOwnerWindows: Map<string, BrowserWindow>
-  fileWatchers: Map<string, FSWatcher>
+  fileWatchers: Map<string, Watcher>
   watcherOwnerWindows: Map<string, BrowserWindow>
   profileWindows: Map<string, BrowserWindow>
   mainWindow: BrowserWindow | null
