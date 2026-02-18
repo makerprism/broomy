@@ -18,7 +18,7 @@ import type { FsApi } from '../preload/apis/fs'
 import type { GitApi } from '../preload/apis/git'
 import type { GhApi } from '../preload/apis/gh'
 import type { ConfigApi, ProfilesApi, AgentsApi, ReposApi } from '../preload/apis/config'
-import type { ShellApi, DialogApi, AppApi } from '../preload/apis/shell'
+import type { ShellApi, DialogApi, AppApi, UpdateApi } from '../preload/apis/shell'
 import type { MenuApi, TsApi } from '../preload/apis/menu'
 
 /** Maps every key of an API type to a Vitest Mock — catches missing/extra keys and non-function values. */
@@ -76,6 +76,16 @@ const mockApp: Mocked<AppApi> = {
   homedir: vi.fn().mockResolvedValue('/Users/test'),
   platform: vi.fn().mockResolvedValue('darwin'),
   tmpdir: vi.fn().mockResolvedValue('/tmp'),
+  getVersion: vi.fn().mockResolvedValue('0.6.1'),
+}
+
+// Mock window.update
+const mockUpdate: Mocked<UpdateApi> = {
+  checkForUpdates: vi.fn().mockResolvedValue({ updateAvailable: false }),
+  downloadUpdate: vi.fn().mockResolvedValue(undefined),
+  installUpdate: vi.fn(),
+  onDownloadProgress: vi.fn().mockReturnValue(() => {}),
+  onUpdateDownloaded: vi.fn().mockReturnValue(() => {}),
 }
 
 // Mock window.profiles
@@ -180,6 +190,7 @@ const broomyMocks = {
   repos: mockRepos,
   agents: mockAgents,
   help: mockHelp,
+  update: mockUpdate,
   menu: mockMenu,
   ts: mockTs,
   fs: mockFs,

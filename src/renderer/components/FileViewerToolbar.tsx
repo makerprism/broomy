@@ -1,3 +1,4 @@
+import { relative } from 'path-browserify'
 import type { EditorActions } from './fileViewers/types'
 import type { FileViewerPosition, ViewMode } from './FileViewer'
 import type { FileViewerPlugin } from './fileViewers'
@@ -5,6 +6,7 @@ import type { FileViewerPlugin } from './fileViewers'
 interface FileViewerToolbarProps {
   fileName: string
   filePath: string
+  directory?: string
   isDirty: boolean
   isSaving: boolean
   viewMode: ViewMode
@@ -26,6 +28,7 @@ interface FileViewerToolbarProps {
 export default function FileViewerToolbar({
   fileName,
   filePath,
+  directory,
   isDirty,
   isSaving,
   viewMode,
@@ -75,7 +78,7 @@ export default function FileViewerToolbar({
             </svg>
           </button>
         )}
-        <span className="text-xs text-text-secondary truncate">{filePath}</span>
+        <span className="text-xs text-text-secondary truncate">{directory ? relative(directory, filePath) : filePath}</span>
         {diffLabel && viewMode === 'diff' && (
           <span className="text-xs px-1.5 py-0.5 rounded bg-bg-tertiary text-text-secondary truncate shrink-0">
             {diffLabel}

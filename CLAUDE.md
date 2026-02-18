@@ -19,6 +19,7 @@ pnpm test:unit:coverage # Unit tests with 90% line coverage threshold
 pnpm test            # Run Playwright E2E tests (headless)
 pnpm test:headed     # E2E tests with visible window
 pnpm dist            # Build and package for macOS
+pnpm check:all       # Run all project-specific checks (workers, etc.)
 ```
 
 ## Troubleshooting
@@ -78,7 +79,7 @@ Session store debounces saves with 500ms delay. Runtime-only state (`status`, `i
 
 ## Testing
 
-**Always confirm these checks pass before considering work done: `pnpm lint`, `pnpm typecheck`, `pnpm test:unit`, and `pnpm test` (E2E).**
+**Always confirm these checks pass before considering work done: `pnpm lint`, `pnpm typecheck`, `pnpm check:all`, `pnpm test:unit`, and `pnpm test` (E2E).**
 
 **IMPORTANT: Do NOT run E2E tests (`pnpm test`) without first asking the user for confirmation.** E2E tests launch Electron and are resource-intensive — running them from multiple agents simultaneously will hose the machine. Always run lint, typecheck, and unit tests first, then ask before running E2E.
 
@@ -106,9 +107,10 @@ Playwright tests in `tests/`. The test system:
 2. Write or update unit tests for any changed logic
 3. Run `pnpm lint` to verify there are no lint errors
 4. Run `pnpm typecheck` to verify there are no type errors
-5. Run `pnpm test:unit` to verify all unit tests pass
-6. Run `pnpm test:unit:coverage` to confirm coverage stays above 90%
-7. **Ask the user for confirmation**, then run `pnpm test` to verify E2E tests still pass
+5. Run `pnpm check:all` to verify project-specific checks pass (worker config, etc.)
+6. Run `pnpm test:unit` to verify all unit tests pass
+7. Run `pnpm test:unit:coverage` to confirm coverage stays above 90%
+8. **Ask the user for confirmation**, then run `pnpm test` to verify E2E tests still pass
 
 ## Adding New Features
 

@@ -1,5 +1,6 @@
 import { ReactNode } from 'react'
 import ErrorIndicator from './ErrorIndicator'
+import VersionIndicator from './VersionIndicator'
 import type { PanelDefinition } from '../panels'
 
 // Detect if we're on Mac for keyboard shortcut display
@@ -75,6 +76,7 @@ export default function LayoutToolbar({
         })}
 
         <ErrorIndicator />
+        <VersionIndicator />
 
         {onOpenPanelPicker && (
           <button

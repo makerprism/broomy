@@ -5,6 +5,7 @@ export interface ReviewDataState {
   reviewData: ReviewData | null
   comments: PendingComment[]
   comparison: ReviewComparison | null
+  fetching: boolean
   waitingForAgent: boolean
   pushing: boolean
   pushResult: string | null
@@ -21,6 +22,7 @@ export interface ReviewDataState {
   setReviewData: React.Dispatch<React.SetStateAction<ReviewData | null>>
   setComments: React.Dispatch<React.SetStateAction<PendingComment[]>>
   setComparison: React.Dispatch<React.SetStateAction<ReviewComparison | null>>
+  setFetching: React.Dispatch<React.SetStateAction<boolean>>
   setWaitingForAgent: React.Dispatch<React.SetStateAction<boolean>>
   setPushing: React.Dispatch<React.SetStateAction<boolean>>
   setPushResult: React.Dispatch<React.SetStateAction<string | null>>
@@ -36,6 +38,7 @@ export function useReviewData(sessionId: string, sessionDirectory: string, prBas
   const [reviewData, setReviewData] = useState<ReviewData | null>(null)
   const [comments, setComments] = useState<PendingComment[]>([])
   const [comparison, setComparison] = useState<ReviewComparison | null>(null)
+  const [fetching, setFetching] = useState(false)
   const [waitingForAgent, setWaitingForAgent] = useState(false)
   const [pushing, setPushing] = useState(false)
   const [pushResult, setPushResult] = useState<string | null>(null)
@@ -58,6 +61,7 @@ export function useReviewData(sessionId: string, sessionDirectory: string, prBas
       setReviewData(null)
       setComments([])
       setComparison(null)
+      setFetching(false)
       setWaitingForAgent(false)
       setError(null)
       setPushResult(null)
@@ -243,6 +247,7 @@ export function useReviewData(sessionId: string, sessionDirectory: string, prBas
     reviewData,
     comments,
     comparison,
+    fetching,
     waitingForAgent,
     pushing,
     pushResult,
@@ -259,6 +264,7 @@ export function useReviewData(sessionId: string, sessionDirectory: string, prBas
     setReviewData,
     setComments,
     setComparison,
+    setFetching,
     setWaitingForAgent,
     setPushing,
     setPushResult,

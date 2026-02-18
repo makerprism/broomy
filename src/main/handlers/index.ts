@@ -8,6 +8,7 @@ import * as ghHandlers from './gh'
 import * as shellHandlers from './shell'
 import * as appHandlers from './app'
 import * as typescriptHandlers from './typescript'
+import * as updaterHandlers from './updater'
 
 export function registerAllHandlers(ipcMain: IpcMain, ctx: HandlerContext): void {
   ptyHandlers.register(ipcMain, ctx)
@@ -18,6 +19,7 @@ export function registerAllHandlers(ipcMain: IpcMain, ctx: HandlerContext): void
   shellHandlers.register(ipcMain, ctx)
   appHandlers.register(ipcMain, ctx)
   typescriptHandlers.register(ipcMain, ctx)
+  updaterHandlers.register(ipcMain, ctx)
 }
 
 export type { HandlerContext } from './types'

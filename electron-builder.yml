@@ -44,5 +44,6 @@ appImage:
   artifactName: ${name}-${version}.${ext}
 npmRebuild: true
 publish:
-  provider: generic
-  url: https://example.com/
+  provider: github
+  owner: Broomy-AI
+  repo: broomy

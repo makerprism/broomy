@@ -1,5 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
+// Mock electron so the real binary isn't loaded
+vi.mock('electron', () => ({
+  IpcMain: {},
+}))
+
 // Mock all sub-handler modules
 vi.mock('./pty', () => ({
   register: vi.fn(),
@@ -33,6 +38,10 @@ vi.mock('./typescript', () => ({
   register: vi.fn(),
 }))
 
+vi.mock('./updater', () => ({
+  register: vi.fn(),
+}))
+
 import { registerAllHandlers } from './index'
 import * as ptyHandlers from './pty'
 import * as configHandlers from './config'
@@ -42,6 +51,7 @@ import * as ghHandlers from './gh'
 import * as shellHandlers from './shell'
 import * as appHandlers from './app'
 import * as typescriptHandlers from './typescript'
+import * as updaterHandlers from './updater'
 import type { HandlerContext } from './types'
 import type { IpcMain } from 'electron'
 
@@ -95,7 +105,12 @@ describe('registerAllHandlers', () => {
     expect(typescriptHandlers.register).toHaveBeenCalledWith(mockIpcMain, mockCtx)
   })
 
-  it('calls all 8 handler register functions exactly once', () => {
+  it('delegates to updaterHandlers.register', () => {
+    registerAllHandlers(mockIpcMain as unknown as IpcMain, mockCtx)
+    expect(updaterHandlers.register).toHaveBeenCalledWith(mockIpcMain, mockCtx)
+  })
+
+  it('calls all 9 handler register functions exactly once', () => {
     registerAllHandlers(mockIpcMain as unknown as IpcMain, mockCtx)
     expect(ptyHandlers.register).toHaveBeenCalledTimes(1)
     expect(configHandlers.register).toHaveBeenCalledTimes(1)
@@ -105,5 +120,6 @@ describe('registerAllHandlers', () => {
     expect(shellHandlers.register).toHaveBeenCalledTimes(1)
     expect(appHandlers.register).toHaveBeenCalledTimes(1)
     expect(typescriptHandlers.register).toHaveBeenCalledTimes(1)
+    expect(updaterHandlers.register).toHaveBeenCalledTimes(1)
   })
 })

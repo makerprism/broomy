@@ -10,6 +10,10 @@ vi.mock('../platform', () => ({
   normalizePath: vi.fn((p: string) => p.replace(/\\/g, '/')),
 }))
 
+vi.mock('electron', () => ({
+  app: { getVersion: vi.fn(() => '0.6.1') },
+}))
+
 import { register } from './app'
 import type { HandlerContext } from './types'
 import type { IpcMain } from 'electron'
@@ -63,9 +67,22 @@ describe('app handler register', () => {
     expect(channels).toContain('app:tmpdir')
   })
 
-  it('registers exactly 4 handlers', () => {
+  it('registers app:getVersion handler', () => {
     register(mockIpcMain as unknown as IpcMain, mockCtx)
-    expect(mockIpcMain.handle).toHaveBeenCalledTimes(4)
+    const channels = mockIpcMain.handle.mock.calls.map((c: unknown[]) => c[0])
+    expect(channels).toContain('app:getVersion')
+  })
+
+  it('app:getVersion handler returns app version', () => {
+    register(mockIpcMain as unknown as IpcMain, mockCtx)
+    const versionCall = mockIpcMain.handle.mock.calls.find((c: unknown[]) => c[0] === 'app:getVersion')
+    const handler = versionCall![1] as () => string
+    expect(handler()).toBe('0.6.1')
+  })
+
+  it('registers exactly 5 handlers', () => {
+    register(mockIpcMain as unknown as IpcMain, mockCtx)
+    expect(mockIpcMain.handle).toHaveBeenCalledTimes(5)
   })
 
   it('app:isDev handler returns ctx.isDev', () => {

@@ -18,6 +18,7 @@ export default function ReviewPanel({ session, repo, onSelectFile }: ReviewPanel
     reviewData,
     comments,
     comparison,
+    fetching,
     waitingForAgent,
     pushing,
     pushResult,
@@ -67,10 +68,18 @@ export default function ReviewPanel({ session, repo, onSelectFile }: ReviewPanel
         <div className="flex items-center gap-2">
           <button
             onClick={handleGenerateReview}
-            disabled={waitingForAgent || !session.agentPtyId}
+            disabled={fetching || waitingForAgent || !session.agentPtyId}
             className="flex-1 py-1.5 text-xs rounded bg-purple-600 text-white hover:bg-purple-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
-            {waitingForAgent ? (
+            {fetching ? (
+              <span className="flex items-center justify-center gap-1.5">
+                <svg className="animate-spin w-3 h-3" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                Fetching latest...
+              </span>
+            ) : waitingForAgent ? (
               <span className="flex items-center justify-center gap-1.5">
                 <svg className="animate-spin w-3 h-3" fill="none" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
@@ -101,7 +110,7 @@ export default function ReviewPanel({ session, repo, onSelectFile }: ReviewPanel
 
       {/* Review content */}
       <div className="flex-1 overflow-y-auto">
-        {!reviewData && !waitingForAgent && (
+        {!reviewData && !waitingForAgent && !fetching && (
           <div className="flex items-center justify-center h-full text-text-primary text-sm px-4 text-center">
             <div>
               <p className="mb-2">Click "Generate Review" to get an AI-generated structured review of this PR.</p>
@@ -110,7 +119,17 @@ export default function ReviewPanel({ session, repo, onSelectFile }: ReviewPanel
           </div>
         )}
 
-        {waitingForAgent && !reviewData && (
+        {fetching && !reviewData && (
+          <div className="flex items-center justify-center h-full text-text-primary px-4">
+            <div className="text-center max-w-xs">
+              <div className="text-sm">
+                Fetching latest changes...
+              </div>
+            </div>
+          </div>
+        )}
+
+        {waitingForAgent && !fetching && !reviewData && (
           <div className="flex items-center justify-center h-full text-text-primary px-4">
             <div className="text-center max-w-xs">
               <div className="text-sm mb-3">

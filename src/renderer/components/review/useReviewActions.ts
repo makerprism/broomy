@@ -29,6 +29,7 @@ export function useReviewActions(
     commentsFilePath,
     historyFilePath,
     promptFilePath,
+    setFetching,
     setWaitingForAgent,
     setPushing,
     setPushResult,
@@ -70,7 +71,7 @@ export function useReviewActions(
   const proceedWithGeneration = async () => {
     setShowGitignoreModal(false)
     setPendingGenerate(false)
-    setWaitingForAgent(true)
+    setFetching(true)
     setError(null)
 
     try {
@@ -93,6 +94,9 @@ export function useReviewActions(
           // Non-fatal - might not have network
         }
       }
+
+      setFetching(false)
+      setWaitingForAgent(true)
 
       // Create .broomy directory
       await window.fs.mkdir(broomyDir)
@@ -141,6 +145,7 @@ export function useReviewActions(
       await window.pty.write(session.agentPtyId!, 'Please read and follow the instructions in .broomy/review-prompt.md')
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
+      setFetching(false)
       setWaitingForAgent(false)
     }
   }
