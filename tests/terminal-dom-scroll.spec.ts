@@ -7,6 +7,8 @@ const __dirname = path.dirname(__filename)
 
 let electronApp: ElectronApplication
 let page: Page
+const runScrollStress = process.env.RUN_SCROLL_STRESS === 'true'
+const describeScrollStress = runScrollStress ? test.describe : test.describe.skip
 
 /**
  * These tests reproduce the original failures from the first test run.
@@ -72,7 +74,7 @@ test.afterAll(async () => {
   if (electronApp) await electronApp.close()
 })
 
-test.describe('DOM Scroll Manipulation (original failure repro)', () => {
+describeScrollStress('DOM Scroll Manipulation (original failure repro)', () => {
   test('setup: wait for plan output', async () => {
     const broomySession = page.locator('.cursor-pointer:has-text("broomy")')
     await broomySession.click()

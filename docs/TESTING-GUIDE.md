@@ -346,6 +346,14 @@ All data comes from the mock handlers in `src/main/index.ts`.
 | `pnpm test:unit:coverage` | Unit tests with 90% line coverage check |
 | `pnpm test` | Run Playwright E2E tests (headless) |
 | `pnpm test:headed` | E2E tests with visible Electron window |
+| `pnpm test:scroll-stress` | Run terminal scroll stress/repro E2E specs (opt-in) |
+
+Terminal scroll stress suites are intentionally opt-in. They are heavier and can be
+timing-sensitive on shared developer machines, so they are gated behind
+`RUN_SCROLL_STRESS=true` for deterministic default `pnpm test` runs.
+
+GitHub Actions runs these specs in a dedicated workflow on a nightly schedule and via
+manual dispatch: `.github/workflows/scroll-stress-e2e.yml`.
 
 ### Recommended Workflow
 
