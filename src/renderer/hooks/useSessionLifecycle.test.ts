@@ -4,6 +4,7 @@ import { renderHook, act } from '@testing-library/react'
 import { useSessionLifecycle } from './useSessionLifecycle'
 import type { Session } from '../store/sessions'
 import type { ProfileData } from '../store/profiles'
+import { terminalBufferRegistry } from '../utils/terminalBufferRegistry'
 
 // Mock terminalBufferRegistry
 vi.mock('../utils/terminalBufferRegistry', () => ({
@@ -365,6 +366,125 @@ describe('useSessionLifecycle', () => {
 
       expect(removeSpy).toHaveBeenCalledWith('keydown', expect.any(Function))
       removeSpy.mockRestore()
+    })
+  })
+
+  describe('session transcript persistence', () => {
+    it('seeds transcript files from stored conversation snapshot on startup', async () => {
+      vi.mocked(window.fs.exists).mockImplementation(async (path: string) => {
+        if (path === '/test/dir/.broomy-session-session-1.txt') return false as never
+        return true as never
+      })
+
+      const sessionWithSnapshot = makeSession({
+        conversationSnapshot: {
+          format: 'plain-text-v1',
+          content: 'stored snapshot line',
+          capturedAt: Date.now(),
+          truncated: false,
+          approxLineCount: 1,
+        },
+      })
+      const params = makeHookParams({
+        sessions: [sessionWithSnapshot],
+        activeSession: sessionWithSnapshot,
+      })
+
+      renderLifecycleHook(params)
+
+      await act(async () => {
+        await Promise.resolve()
+      })
+
+      expect(window.fs.writeFile).toHaveBeenCalledWith(
+        '/test/dir/.broomy-session-session-1.txt',
+        expect.stringContaining('stored snapshot line')
+      )
+    })
+
+    it('writes transcript files on beforeunload', async () => {
+      vi.mocked(terminalBufferRegistry.getBuffer).mockReturnValue('agent output line 1\nagent output line 2')
+      vi.mocked(window.shell.exec).mockResolvedValue({ success: false, stdout: '', stderr: '', exitCode: 1 } as never)
+
+      const params = makeHookParams()
+      renderLifecycleHook(params)
+
+      await act(async () => {
+        window.dispatchEvent(new Event('beforeunload'))
+        await Promise.resolve()
+      })
+
+      expect(window.fs.writeFile).toHaveBeenCalledWith(
+        '/test/dir/.broomy-session-session-1.txt',
+        expect.stringContaining('agent output line 1')
+      )
+    })
+
+    it('does not overwrite existing worktree transcript from stale snapshot on startup', async () => {
+      vi.mocked(window.fs.exists).mockImplementation(async (path: string) => {
+        if (path === '/test/dir/.broomy-session-session-1.txt') return true as never
+        return true as never
+      })
+
+      const sessionWithSnapshot = makeSession({
+        conversationSnapshot: {
+          format: 'plain-text-v1',
+          content: 'older snapshot content',
+          capturedAt: Date.now(),
+          truncated: false,
+          approxLineCount: 1,
+        },
+      })
+      const params = makeHookParams({
+        sessions: [sessionWithSnapshot],
+        activeSession: sessionWithSnapshot,
+      })
+
+      renderLifecycleHook(params)
+
+      await act(async () => {
+        await Promise.resolve()
+      })
+
+      expect(window.fs.writeFile).not.toHaveBeenCalledWith(
+        '/test/dir/.broomy-session-session-1.txt',
+        expect.stringContaining('older snapshot content')
+      )
+    })
+
+    it('adds worktree transcript pattern to local git exclude', async () => {
+      vi.mocked(terminalBufferRegistry.getBuffer).mockReturnValue('agent output line')
+      vi.mocked(window.shell.exec).mockResolvedValue({ success: true, stdout: '/test/dir/.git/info/exclude\n', stderr: '', exitCode: 0 } as never)
+      vi.mocked(window.fs.exists).mockResolvedValue(true as never)
+      vi.mocked(window.fs.readFile).mockResolvedValue('# existing\n' as never)
+
+      const params = makeHookParams()
+      renderLifecycleHook(params)
+
+      await act(async () => {
+        window.dispatchEvent(new Event('beforeunload'))
+        await Promise.resolve()
+      })
+
+      expect(window.shell.exec).toHaveBeenCalledWith('git rev-parse --git-path info/exclude', '/test/dir')
+      expect(window.fs.appendFile).toHaveBeenCalledWith(
+        '/test/dir/.git/info/exclude',
+        expect.stringContaining('.broomy-session-*.txt')
+      )
+    })
+
+    it('skips transcript writes when buffer is empty', async () => {
+      vi.mocked(terminalBufferRegistry.getBuffer).mockReturnValue('')
+
+      const params = makeHookParams()
+      renderLifecycleHook(params)
+
+      await act(async () => {
+        window.dispatchEvent(new Event('beforeunload'))
+        await Promise.resolve()
+      })
+
+      expect(window.fs.writeFile).not.toHaveBeenCalled()
     })
   })
 

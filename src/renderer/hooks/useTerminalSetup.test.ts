@@ -307,6 +307,88 @@ describe('useTerminalSetup', () => {
     )
   })
 
+  it('waits for OpenCode startup output before restoring conversation snapshot', async () => {
+    vi.useFakeTimers()
+    try {
+      let onDataCb: ((data: string) => void) | null = null
+      vi.mocked(window.pty.onData).mockImplementation((_id, cb) => {
+        onDataCb = cb as (data: string) => void
+        return () => {}
+      })
+
+      useSessionStore.setState({
+        sessions: [
+          {
+            id: 'session-1',
+            name: 'Test Session',
+            directory: '/test/dir',
+            branch: 'main',
+            status: 'idle',
+            agentId: 'agent-1',
+            panelVisibility: {},
+            showExplorer: true,
+            showFileViewer: false,
+            showDiff: false,
+            selectedFilePath: null,
+            planFilePath: null,
+            fileViewerPosition: 'top',
+            layoutSizes: {
+              explorerWidth: 256,
+              fileViewerSize: 300,
+              userTerminalHeight: 192,
+              diffPanelWidth: 320,
+              tutorialPanelWidth: 320,
+            },
+            explorerFilter: 'files',
+            lastMessage: null,
+            lastMessageTime: null,
+            isUnread: false,
+            workingStartTime: null,
+            recentFiles: [],
+            conversationSnapshot: {
+              format: 'plain-text-v1',
+              content: 'line one\nline two',
+              capturedAt: Date.now(),
+              truncated: false,
+              approxLineCount: 2,
+            },
+            terminalTabs: { tabs: [{ id: 'tab-1', name: 'Terminal' }], activeTabId: null },
+            branchStatus: 'in-progress',
+            isArchived: false,
+          },
+        ],
+      })
+
+      const config = makeConfig({ isAgentTerminal: true, command: 'opencode --continue' })
+      const containerRef = makeContainerRef()
+
+      renderHook(() => useTerminalSetup(config, containerRef))
+      await act(async () => { await Promise.resolve() })
+
+      if (onDataCb) {
+        act(() => { onDataCb!('loading shell profile...') })
+      }
+
+      act(() => { vi.advanceTimersByTime(1500) })
+
+      expect(mockTerminalWrite).not.toHaveBeenCalledWith(
+        expect.stringContaining('[Restored terminal snapshot from previous app session.]'),
+      )
+
+      if (onDataCb) {
+        act(() => { onDataCb!('OpenCode is ready') })
+      }
+
+      act(() => { vi.advanceTimersByTime(250) })
+
+      expect(mockTerminalWrite).toHaveBeenCalledWith(
+        expect.stringContaining('[Restored terminal snapshot from previous app session.]'),
+      )
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('does not register terminal buffer for non-agent terminals', () => {
     const config = makeConfig({ isAgentTerminal: false })
     const containerRef = makeContainerRef()

@@ -53,6 +53,12 @@ const XTERM_THEME = {
 
 const RECAP_TAIL_LINES = 5
 const RECAP_MAX_CHARS = 280
+const RESTORE_AFTER_OUTPUT_DELAY_MS = 120
+const RESTORE_FALLBACK_DELAY_MS = 200
+const OPENCODE_RESTORE_FALLBACK_DELAY_MS = 4000
+const OPENCODE_STARTUP_SIGNAL = /\b(opencode|open\s*code)\b/i
+
+function isOpenCodeCommand(command: string | undefined): boolean { return !!command && /\bopencode\b/i.test(command) }
 
 function buildRestoreRecapPrompt(snapshotContent: string | null | undefined): string | null {
   if (!snapshotContent) return null
@@ -392,6 +398,7 @@ export function useTerminalSetup(
     const envVars = s.envRef.current
     const effectCwd = s.cwdRef.current
     const effectStartTime = Date.now()
+    const isOpenCodeAgentCommand = isAgent && isOpenCodeCommand(cmd)
 
     const terminal = new XTerm({
       theme: XTERM_THEME,
@@ -448,9 +455,7 @@ export function useTerminalSetup(
 
     const id = `${sessionId}-${Date.now()}`
     s.ptyIdRef.current = id
-
-    let restoreTimeout: ReturnType<typeof setTimeout> | null = null
-    let restoreAfterOutputTimeout: ReturnType<typeof setTimeout> | null = null
+    let restoreTimeout: ReturnType<typeof setTimeout> | null = null, restoreAfterOutputTimeout: ReturnType<typeof setTimeout> | null = null
     let recapPrefillTimeout: ReturnType<typeof setTimeout> | null = null
 
     window.pty.create({ id, cwd: effectCwd, command: cmd, sessionId, env: envVars })
@@ -503,13 +508,19 @@ export function useTerminalSetup(
         }
 
         const scheduleConversationRestoreAfterOutput = () => {
-          if (!restoredConversation || hasRestoredConversation) return
+          if (!restoredConversation || hasRestoredConversation || !hasSeenAgentStartupSignal) return
           if (restoreAfterOutputTimeout) clearTimeout(restoreAfterOutputTimeout)
-          restoreAfterOutputTimeout = setTimeout(restoreConversation, 120)
+          restoreAfterOutputTimeout = setTimeout(restoreConversation, RESTORE_AFTER_OUTPUT_DELAY_MS)
+        }
+
+        let hasSeenAgentStartupSignal = !isOpenCodeAgentCommand
+        const maybeMarkStartupSignalSeen = (data: string) => {
+          if (!hasSeenAgentStartupSignal && isOpenCodeAgentCommand && OPENCODE_STARTUP_SIGNAL.test(data)) hasSeenAgentStartupSignal = true
         }
 
         const removeDataListener = window.pty.onData(id, (data) => {
           dataHandler.handleData(data)
+          maybeMarkStartupSignalSeen(data)
           scheduleConversationRestoreAfterOutput()
         })
 
@@ -523,7 +534,8 @@ export function useTerminalSetup(
 
         if (restoredConversation) {
           // Fallback when startup emits no data (or very delayed data).
-          restoreTimeout = setTimeout(restoreConversation, 200)
+          const fallbackDelay = isOpenCodeAgentCommand ? OPENCODE_RESTORE_FALLBACK_DELAY_MS : RESTORE_FALLBACK_DELAY_MS
+          restoreTimeout = setTimeout(restoreConversation, fallbackDelay)
         }
 
         s.cleanupRef.current = () => { dataHandler.clearTimers(); removeDataListener(); removeExitListener() }

@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useState } from 'react'
+import { useEffect, useCallback, useRef, useState } from 'react'
 import type { Session } from '../store/sessions'
 import type { ProfileData } from '../store/profiles'
 import { terminalBufferRegistry } from '../utils/terminalBufferRegistry'
@@ -6,6 +6,7 @@ import { loadMonacoProjectContext } from '../utils/monacoProjectContext'
 import { flushSaveNow, scheduleSave } from '../store/configPersistence'
 import { useSessionStore } from '../store/sessions'
 import { buildConversationSnapshot } from '../utils/conversationSnapshot'
+import { buildSessionTranscript, getWorktreeSessionTranscriptPath, persistSessionTranscript } from '../utils/sessionTranscript'
 
 const SNAPSHOT_LIMITS = { maxLines: 1500, maxBytes: 250_000 }
 const SNAPSHOT_CHECKPOINT_MS = 20_000
@@ -45,6 +46,7 @@ export function useSessionLifecycle({
 }) {
   const [directoryExists, setDirectoryExists] = useState<Record<string, boolean>>({})
   const setConversationSnapshot = useSessionStore((state) => state.setConversationSnapshot)
+  const lastSavedTranscriptBufferRef = useRef<Record<string, string>>({})
 
   const captureConversationSnapshots = useCallback(() => {
     let hasChanges = false
@@ -64,6 +66,58 @@ export function useSessionLifecycle({
       scheduleSave()
     }
   }, [sessions, setConversationSnapshot])
+
+  const persistSessionTranscripts = useCallback(async () => {
+    if (sessions.length === 0) return
+
+    try {
+      for (const session of sessions) {
+        const buffer = terminalBufferRegistry.getBuffer(session.id)
+        if (!buffer?.trim()) continue
+
+        if (lastSavedTranscriptBufferRef.current[session.id] === buffer) continue
+
+        const content = buildSessionTranscript(session, buffer)
+        await persistSessionTranscript(session, content, buffer, lastSavedTranscriptBufferRef.current)
+      }
+    } catch {
+      // Best-effort persistence; ignore errors during shutdown/checkpointing.
+    }
+  }, [sessions])
+
+  // On startup/profile load, seed transcript files from persisted snapshots so
+  // agents can discover them before terminals are mounted.
+  useEffect(() => {
+    let cancelled = false
+
+    const seedTranscriptsFromSnapshots = async () => {
+      if (sessions.length === 0) return
+
+      try {
+        for (const session of sessions) {
+          const snapshotContent = session.conversationSnapshot?.content
+          if (!snapshotContent?.trim()) continue
+          if (lastSavedTranscriptBufferRef.current[session.id] === snapshotContent) continue
+
+          const transcriptPath = getWorktreeSessionTranscriptPath(session)
+          const transcriptExists = await window.fs.exists(transcriptPath)
+          if (transcriptExists) continue
+
+          const content = buildSessionTranscript(session, snapshotContent)
+          await persistSessionTranscript(session, content, snapshotContent, lastSavedTranscriptBufferRef.current)
+          if (cancelled) return
+        }
+      } catch {
+        // Best-effort startup hydration; ignore failures.
+      }
+    }
+
+    void seedTranscriptsFromSnapshots()
+
+    return () => {
+      cancelled = true
+    }
+  }, [sessions])
 
   // Check if session directories exist
   useEffect(() => {
@@ -137,19 +191,23 @@ export function useSessionLifecycle({
 
   // Periodically checkpoint conversation snapshots for restore on restart.
   useEffect(() => {
-    const interval = setInterval(captureConversationSnapshots, SNAPSHOT_CHECKPOINT_MS)
+    const interval = setInterval(() => {
+      captureConversationSnapshots()
+      void persistSessionTranscripts()
+    }, SNAPSHOT_CHECKPOINT_MS)
     return () => clearInterval(interval)
-  }, [captureConversationSnapshots])
+  }, [captureConversationSnapshots, persistSessionTranscripts])
 
   // Best-effort final snapshot flush on window close/reload.
   useEffect(() => {
     const handleBeforeUnload = () => {
       captureConversationSnapshots()
+      void persistSessionTranscripts()
       void flushSaveNow()
     }
     window.addEventListener('beforeunload', handleBeforeUnload)
     return () => window.removeEventListener('beforeunload', handleBeforeUnload)
-  }, [captureConversationSnapshots])
+  }, [captureConversationSnapshots, persistSessionTranscripts])
 
   // Keyboard shortcut to copy terminal content + summary (Cmd+Shift+C)
   useEffect(() => {
