@@ -225,6 +225,71 @@ describe('useTerminalSetup', () => {
     expect(terminalBufferRegistry.register).toHaveBeenCalledWith('session-1', expect.any(Function))
   })
 
+  it('restores conversation snapshot for agent terminals after PTY startup', async () => {
+    let onDataCb: ((data: string) => void) | null = null
+    vi.mocked(window.pty.onData).mockImplementation((_id, cb) => {
+      onDataCb = cb as (data: string) => void
+      return () => {}
+    })
+
+    useSessionStore.setState({
+      sessions: [
+        {
+          id: 'session-1',
+          name: 'Test Session',
+          directory: '/test/dir',
+          branch: 'main',
+          status: 'idle',
+          agentId: 'agent-1',
+          panelVisibility: {},
+          showExplorer: true,
+          showFileViewer: false,
+          showDiff: false,
+          selectedFilePath: null,
+          planFilePath: null,
+          fileViewerPosition: 'top',
+          layoutSizes: {
+            explorerWidth: 256,
+            fileViewerSize: 300,
+            userTerminalHeight: 192,
+            diffPanelWidth: 320,
+            tutorialPanelWidth: 320,
+          },
+          explorerFilter: 'files',
+          lastMessage: null,
+          lastMessageTime: null,
+          isUnread: false,
+          workingStartTime: null,
+          recentFiles: [],
+          conversationSnapshot: {
+            format: 'plain-text-v1',
+            content: 'line one\nline two',
+            capturedAt: Date.now(),
+            truncated: false,
+            approxLineCount: 2,
+          },
+          terminalTabs: { tabs: [{ id: 'tab-1', name: 'Terminal' }], activeTabId: null },
+          branchStatus: 'in-progress',
+          isArchived: false,
+        },
+      ],
+    })
+
+    const config = makeConfig({ isAgentTerminal: true, command: 'claude-code' })
+    const containerRef = makeContainerRef()
+
+    renderHook(() => useTerminalSetup(config, containerRef))
+
+    await act(async () => { await new Promise(r => setTimeout(r, 0)) })
+    if (onDataCb) {
+      act(() => { onDataCb!('\u001bc') })
+    }
+
+    await act(async () => { await new Promise(r => setTimeout(r, 250)) })
+
+    expect(mockTerminalWrite).toHaveBeenCalledWith('line one\r\nline two')
+  })
+
   it('does not register terminal buffer for non-agent terminals', () => {
     const config = makeConfig({ isAgentTerminal: false })
     const containerRef = makeContainerRef()

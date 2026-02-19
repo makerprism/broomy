@@ -79,7 +79,7 @@ export function register(ipcMain: IpcMain, ctx: HandlerContext): void {
 
   // Create E2E test directories if in E2E mode
   if (ctx.isE2ETest) {
-    const sessions = getE2EDemoSessions(ctx.isScreenshotMode)
+    const sessions = getE2EDemoSessions(ctx.isScreenshotMode, ctx.e2eConversationRestoreSnapshot)
     for (const session of sessions) {
       if (!existsSync(session.directory)) {
         mkdirSync(session.directory, { recursive: true })
@@ -163,7 +163,7 @@ export function register(ipcMain: IpcMain, ctx: HandlerContext): void {
     if (ctx.isE2ETest) {
       return {
         agents: DEFAULT_AGENTS,
-        sessions: getE2EDemoSessions(ctx.isScreenshotMode),
+        sessions: getE2EDemoSessions(ctx.isScreenshotMode, ctx.e2eConversationRestoreSnapshot),
         repos: getE2EDemoRepos(),
         defaultCloneDir: normalizePath(join(tmpdir(), 'broomy-e2e-repos')),
       }

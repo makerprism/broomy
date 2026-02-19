@@ -8,6 +8,7 @@ import { normalizePath } from '../platform'
 export interface HandlerContext {
   isE2ETest: boolean
   isScreenshotMode: boolean
+  e2eConversationRestoreSnapshot?: boolean
   isDev: boolean
   isWindows: boolean
   ptyProcesses: Map<string, IPty>
@@ -62,7 +63,7 @@ export const expandHomePath = (path: string): string => {
 }
 
 // E2E mock data
-export function getE2EDemoSessions(isScreenshotMode: boolean) {
+export function getE2EDemoSessions(isScreenshotMode: boolean, includeConversationRestoreSnapshot = false) {
   return isScreenshotMode ? [
     { id: '1', name: 'backend-api', directory: normalizePath(join(tmpdir(), 'broomy-e2e-backend-api')), agentId: 'claude' },
     { id: '2', name: 'web-dashboard', directory: normalizePath(join(tmpdir(), 'broomy-e2e-web-dashboard')), agentId: 'codex' },
@@ -73,7 +74,21 @@ export function getE2EDemoSessions(isScreenshotMode: boolean) {
     { id: '7', name: 'docs-site', directory: normalizePath(join(tmpdir(), 'broomy-e2e-docs-site')), agentId: null },
     { id: '8', name: 'data-pipeline', directory: normalizePath(join(tmpdir(), 'broomy-e2e-data-pipeline')), agentId: 'claude' },
   ] : [
-    { id: '1', name: 'broomy', directory: normalizePath(join(tmpdir(), 'broomy-e2e-broomy')), agentId: 'claude' },
+    {
+      id: '1',
+      name: 'broomy',
+      directory: normalizePath(join(tmpdir(), 'broomy-e2e-broomy')),
+      agentId: 'claude',
+      ...(includeConversationRestoreSnapshot ? {
+        conversationSnapshot: {
+          format: 'plain-text-v1',
+          content: 'E2E_RESTORE_MARKER: conversation should stay visible',
+          capturedAt: Date.now(),
+          truncated: false,
+          approxLineCount: 1,
+        },
+      } : {}),
+    },
     { id: '2', name: 'backend-api', directory: normalizePath(join(tmpdir(), 'broomy-e2e-backend-api')), agentId: 'aider' },
     { id: '3', name: 'docs-site', directory: normalizePath(join(tmpdir(), 'broomy-e2e-docs-site')), agentId: null },
   ]

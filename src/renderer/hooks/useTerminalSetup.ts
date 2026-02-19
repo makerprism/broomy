@@ -388,17 +388,10 @@ export function useTerminalSetup(
 
     terminal.open(containerRef.current)
 
-    if (isAgent && sessionId) {
-      const session = useSessionStore.getState().sessions.find((item) => item.id === sessionId)
-      const restored = session?.conversationSnapshot?.content
-      if (restored) {
-        try {
-          terminal.write(restored.replace(/\n/g, '\r\n'))
-        } catch {
-          // Continue even if restore write fails.
-        }
-      }
-    }
+    const session = isAgent && sessionId
+      ? useSessionStore.getState().sessions.find((item) => item.id === sessionId)
+      : undefined
+    const restoredConversation = session?.conversationSnapshot?.content
 
     if (isAgent && sessionId) {
       terminalBufferRegistry.register(sessionId, () => {
@@ -433,6 +426,9 @@ export function useTerminalSetup(
     const id = `${sessionId}-${Date.now()}`
     s.ptyIdRef.current = id
 
+    let restoreTimeout: ReturnType<typeof setTimeout> | null = null
+    let restoreAfterOutputTimeout: ReturnType<typeof setTimeout> | null = null
+
     window.pty.create({ id, cwd: effectCwd, command: cmd, sessionId, env: envVars })
       .then(() => {
         if (isAgentTerminal && sessionId) s.setAgentPtyId(sessionId, id)
@@ -452,7 +448,28 @@ export function useTerminalSetup(
           state: s,
           effectStartTime,
         })
-        const removeDataListener = window.pty.onData(id, dataHandler.handleData)
+
+        let hasRestoredConversation = false
+        const restoreConversation = () => {
+          if (hasRestoredConversation || !restoredConversation) return
+          hasRestoredConversation = true
+          try {
+            terminal.write(restoredConversation.replace(/\n/g, '\r\n'))
+          } catch {
+            // Continue even if restore write fails.
+          }
+        }
+
+        const scheduleConversationRestoreAfterOutput = () => {
+          if (!restoredConversation || hasRestoredConversation) return
+          if (restoreAfterOutputTimeout) clearTimeout(restoreAfterOutputTimeout)
+          restoreAfterOutputTimeout = setTimeout(restoreConversation, 120)
+        }
+
+        const removeDataListener = window.pty.onData(id, (data) => {
+          dataHandler.handleData(data)
+          scheduleConversationRestoreAfterOutput()
+        })
 
         const removeExitListener = window.pty.onExit(id, (exitCode: number) => {
           terminal.write(`\r\n[Process exited with code ${exitCode}]\r\n`)
@@ -461,6 +478,11 @@ export function useTerminalSetup(
             s.scheduleUpdate({ status: 'idle' })
           }
         })
+
+        if (restoredConversation) {
+          // Fallback when startup emits no data (or very delayed data).
+          restoreTimeout = setTimeout(restoreConversation, 200)
+        }
 
         s.cleanupRef.current = () => { dataHandler.clearTimers(); removeDataListener(); removeExitListener() }
       })
@@ -503,6 +525,8 @@ export function useTerminalSetup(
       if (ptyResizeTimeout) clearTimeout(ptyResizeTimeout)
       if (scrollTracking.state.pendingScrollRAF) cancelAnimationFrame(scrollTracking.state.pendingScrollRAF)
       s.cleanupRef.current?.()
+      if (restoreTimeout) clearTimeout(restoreTimeout)
+      if (restoreAfterOutputTimeout) clearTimeout(restoreAfterOutputTimeout)
       if (s.ptyIdRef.current) { void window.pty.kill(s.ptyIdRef.current); s.ptyIdRef.current = null }
       terminal.dispose()
       if (s.updateTimeoutRef.current) clearTimeout(s.updateTimeoutRef.current)
