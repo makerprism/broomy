@@ -9,16 +9,6 @@ let electronApp: ElectronApplication
 let page: Page
 const runScrollStress = process.env.RUN_SCROLL_STRESS === 'true'
 const describeScrollStress = runScrollStress ? test.describe : test.describe.skip
-const isHeadless = (process.env.E2E_HEADLESS ?? 'true') !== 'false'
-
-async function waitForPlanOutput(page: Page, timeoutMs = 30000) {
-  await expect
-    .poll(async () => {
-      const text = await getTerminalText(page)
-      return text.includes('PLAN_OUTPUT_END')
-    }, { timeout: timeoutMs, intervals: [250, 500, 1000] })
-    .toBe(true)
-}
 
 // Helper to get scroll state of the agent terminal's xterm viewport
 async function getScrollState(page: Page) {
@@ -70,8 +60,6 @@ test.afterAll(async () => {
 })
 
 describeScrollStress('Terminal Scrolling after Large Output', () => {
-  test.describe.configure({ timeout: 120000 })
-
   test('should be at the bottom after plan output completes', async () => {
     // Select the broomy session (has agent)
     const broomySession = page.locator('.cursor-pointer:has-text("broomy")')
@@ -80,7 +68,11 @@ describeScrollStress('Terminal Scrolling after Large Output', () => {
     // Wait for the fake-claude-plan to finish outputting
     // The script: 0.5s init + 0.5s pause + ~0.1s plan + 0.3s pause = ~1.5s
     // Give extra time for PTY data to arrive and xterm to process
-    await waitForPlanOutput(page)
+    await page.waitForTimeout(4000)
+
+    // Verify plan output arrived
+    const text = await getTerminalText(page)
+    expect(text).toContain('PLAN_OUTPUT_END')
 
     // After the large plan output, terminal should be at the bottom
     const scrollState = await getScrollState(page)
@@ -90,8 +82,6 @@ describeScrollStress('Terminal Scrolling after Large Output', () => {
   })
 
   test('should allow scrolling up and show Go to End button', async () => {
-    test.skip(isHeadless, 'Wheel-stress path is unstable in headless Electron')
-
     // Scroll up using wheel events on the terminal
     const xtermEl = page.locator('.xterm').first()
     await xtermEl.hover()
@@ -116,8 +106,6 @@ describeScrollStress('Terminal Scrolling after Large Output', () => {
   })
 
   test('should stay scrolled up when new output is not coming', async () => {
-    test.skip(isHeadless, 'Wheel-stress path is unstable in headless Electron')
-
     // We're already scrolled up from previous test
     // Get current scroll position
     const scrollBefore = await getScrollState(page)
@@ -136,8 +124,6 @@ describeScrollStress('Terminal Scrolling after Large Output', () => {
   })
 
   test('should return to bottom when Go to End is clicked', async () => {
-    test.skip(isHeadless, 'Wheel-stress path is unstable in headless Electron')
-
     // Click the "Go to End" button
     const goToEndButton = page.locator('button:has-text("Go to End")')
     await expect(goToEndButton).toBeVisible({ timeout: 2000 })
@@ -156,8 +142,6 @@ describeScrollStress('Terminal Scrolling after Large Output', () => {
   })
 
   test('should re-engage following when user scrolls to bottom manually', async () => {
-    test.skip(isHeadless, 'Wheel-stress path is unstable in headless Electron')
-
     // First, scroll up
     const xtermEl = page.locator('.xterm').first()
     await xtermEl.hover()
@@ -188,8 +172,6 @@ describeScrollStress('Terminal Scrolling after Large Output', () => {
   })
 
   test('should not lose scroll position on window resize', async () => {
-    test.skip(isHeadless, 'Wheel-stress path is unstable in headless Electron')
-
     // First, scroll up to a specific position
     const xtermEl = page.locator('.xterm').first()
     await xtermEl.hover()

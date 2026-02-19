@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { Terminal as XTerm } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
+import { SerializeAddon } from '@xterm/addon-serialize'
 import { useErrorStore } from '../store/errors'
 import { useSessionStore } from '../store/sessions'
 import { terminalBufferRegistry } from '../utils/terminalBufferRegistry'
@@ -246,23 +247,6 @@ function createScrollTracking(
   return { state, updateFollowingFromScroll, handleKeyScroll, logScrollDiag }
 }
 
-function getTerminalPlainText(terminal: XTerm): string {
-  const buffer = terminal.buffer.active
-  const lines: string[] = []
-
-  for (let i = 0; i < buffer.length; i++) {
-    const line = buffer.getLine(i)
-    if (!line) continue
-    lines.push(line.translateToString(true))
-  }
-
-  while (lines.length > 0 && lines[lines.length - 1] === '') {
-    lines.pop()
-  }
-
-  return lines.join('\n')
-}
-
 // ── Terminal state hook (refs, store wiring, callbacks) ──────────────
 
 function useTerminalState(config: TerminalConfig) {
@@ -270,6 +254,7 @@ function useTerminalState(config: TerminalConfig) {
 
   const terminalRef = useRef<XTerm | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
+  const serializeAddonRef = useRef<SerializeAddon | null>(null)
   const cleanupRef = useRef<(() => void) | null>(null)
   const updateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const idleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -336,7 +321,7 @@ function useTerminalState(config: TerminalConfig) {
   }, [])
 
   return {
-    terminalRef, fitAddonRef, cleanupRef,
+    terminalRef, fitAddonRef, serializeAddonRef, cleanupRef,
     updateTimeoutRef, idleTimeoutRef, lastStatusRef,
     lastUserInputRef, lastInteractionRef, ptyIdRef, isFollowingRef,
     showScrollButton, setShowScrollButton,
@@ -386,23 +371,15 @@ export function useTerminalSetup(
     const fitAddon = new FitAddon()
     terminal.loadAddon(fitAddon)
 
+    const serializeAddon = new SerializeAddon()
+    terminal.loadAddon(serializeAddon)
+    s.serializeAddonRef.current = serializeAddon
+
     terminal.open(containerRef.current)
 
     if (isAgent && sessionId) {
-      const session = useSessionStore.getState().sessions.find((item) => item.id === sessionId)
-      const restored = session?.conversationSnapshot?.content
-      if (restored) {
-        try {
-          terminal.write(restored.replace(/\n/g, '\r\n'))
-        } catch {
-          // Continue even if restore write fails.
-        }
-      }
-    }
-
-    if (isAgent && sessionId) {
       terminalBufferRegistry.register(sessionId, () => {
-        try { return getTerminalPlainText(terminal) } catch { return '' }
+        try { return serializeAddon.serialize() } catch { return '' }
       })
     }
 

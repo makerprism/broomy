@@ -9,16 +9,6 @@ let electronApp: ElectronApplication
 let page: Page
 const runScrollStress = process.env.RUN_SCROLL_STRESS === 'true'
 const describeScrollStress = runScrollStress ? test.describe : test.describe.skip
-const isHeadless = (process.env.E2E_HEADLESS ?? 'true') !== 'false'
-
-async function waitForPlanOutput(page: Page, timeoutMs = 30000) {
-  await expect
-    .poll(async () => {
-      const text = await getTerminalText(page)
-      return text.includes('PLAN_OUTPUT_END')
-    }, { timeout: timeoutMs, intervals: [250, 500, 1000] })
-    .toBe(true)
-}
 
 /**
  * Get scroll state from both the DOM viewport and xterm's internal buffer.
@@ -55,9 +45,9 @@ async function getTerminalText(page: Page) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describeScrollStress('Big Plan — Single Chunk', () => {
-  test.describe.configure({ timeout: 120000 })
-
   test.beforeAll(async () => {
+    test.setTimeout(120000)
+
     const fakeClaude = path.join(__dirname, '..', 'scripts', 'fake-claude-bigplan.sh')
     electronApp = await electron.launch({
       args: [path.join(__dirname, '..', 'out', 'main', 'index.js')],
@@ -87,7 +77,9 @@ describeScrollStress('Big Plan — Single Chunk', () => {
   test('setup: wait for plan output', async () => {
     const broomySession = page.locator('.cursor-pointer:has-text("broomy")')
     await broomySession.click()
-    await waitForPlanOutput(page)
+    await page.waitForTimeout(6000)
+    const text = await getTerminalText(page)
+    expect(text).toContain('PLAN_OUTPUT_END')
     const diag = await getFullScrollDiagnostics(page)
     console.log('[chunk] After plan output:', JSON.stringify(diag!.dom))
   })
@@ -99,8 +91,6 @@ describeScrollStress('Big Plan — Single Chunk', () => {
   })
 
   test('wheel-up then wheel-down should reach bottom', async () => {
-    test.skip(isHeadless, 'Wheel-stress path is unstable in headless Electron')
-
     const xtermEl = page.locator('.xterm').first()
     await xtermEl.hover()
 
@@ -132,8 +122,6 @@ describeScrollStress('Big Plan — Single Chunk', () => {
   })
 
   test('session switch then scroll should work', async () => {
-    test.skip(isHeadless, 'Wheel-stress path is unstable in headless Electron')
-
     // Switch away and back
     await page.locator('.cursor-pointer:has-text("backend-api")').click()
     await page.waitForTimeout(1000)
@@ -164,8 +152,6 @@ describeScrollStress('Big Plan — Single Chunk', () => {
   })
 
   test('resize then scroll should work', async () => {
-    test.skip(isHeadless, 'Wheel-stress path is unstable in headless Electron')
-
     const size = await page.evaluate(() => ({
       width: window.innerWidth,
       height: window.innerHeight,
@@ -208,9 +194,9 @@ describeScrollStress('Big Plan — Single Chunk', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 describeScrollStress('Big Plan — Streaming Chunks', () => {
-  test.describe.configure({ timeout: 120000 })
-
   test.beforeAll(async () => {
+    test.setTimeout(120000)
+
     const fakeClaude = path.join(__dirname, '..', 'scripts', 'fake-claude-streaming.sh')
     electronApp = await electron.launch({
       args: [path.join(__dirname, '..', 'out', 'main', 'index.js')],
@@ -243,7 +229,10 @@ describeScrollStress('Big Plan — Streaming Chunks', () => {
 
     // Streaming takes longer due to the small delays between chunks
     // ~190 lines * ~7ms per line ≈ 1.3s + overhead
-    await waitForPlanOutput(page, 35000)
+    await page.waitForTimeout(8000)
+
+    const text = await getTerminalText(page)
+    expect(text).toContain('PLAN_OUTPUT_END')
     const diag = await getFullScrollDiagnostics(page)
     console.log('[stream] After plan output:', JSON.stringify(diag!.dom))
   })
@@ -256,8 +245,6 @@ describeScrollStress('Big Plan — Streaming Chunks', () => {
   })
 
   test('wheel-up then wheel-down should reach bottom', async () => {
-    test.skip(isHeadless, 'Wheel-stress path is unstable in headless Electron')
-
     const xtermEl = page.locator('.xterm').first()
     await xtermEl.hover()
 
@@ -287,8 +274,6 @@ describeScrollStress('Big Plan — Streaming Chunks', () => {
   })
 
   test('scrolling DURING output should not break state', async () => {
-    test.skip(isHeadless, 'Wheel-stress path is unstable in headless Electron')
-
     // This is a critical test: restart the plan output and try scrolling
     // while it's still streaming. This simulates the user trying to read
     // the plan while it's being generated.

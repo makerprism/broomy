@@ -146,14 +146,6 @@ export type SessionData = {
   hasHadCommits?: boolean
   // Archive state
   isArchived?: boolean
-  // Conversation restore snapshot
-  conversationSnapshot?: {
-    format: 'plain-text-v1'
-    content: string
-    capturedAt: number
-    truncated: boolean
-    approxLineCount: number
-  }
 }
 
 export type ConfigData = {

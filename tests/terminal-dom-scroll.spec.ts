@@ -10,15 +10,6 @@ let page: Page
 const runScrollStress = process.env.RUN_SCROLL_STRESS === 'true'
 const describeScrollStress = runScrollStress ? test.describe : test.describe.skip
 
-async function waitForPlanOutput(page: Page, timeoutMs = 30000) {
-  await expect
-    .poll(async () => {
-      const text = await getTerminalText(page)
-      return text.includes('PLAN_OUTPUT_END')
-    }, { timeout: timeoutMs, intervals: [250, 500, 1000] })
-    .toBe(true)
-}
-
 /**
  * These tests reproduce the original failures from the first test run.
  * They use direct DOM manipulation (setting viewport.scrollTop) which
@@ -84,12 +75,12 @@ test.afterAll(async () => {
 })
 
 describeScrollStress('DOM Scroll Manipulation (original failure repro)', () => {
-  test.describe.configure({ timeout: 120000 })
-
   test('setup: wait for plan output', async () => {
     const broomySession = page.locator('.cursor-pointer:has-text("broomy")')
     await broomySession.click()
-    await waitForPlanOutput(page)
+    await page.waitForTimeout(6000)
+    const text = await getTerminalText(page)
+    expect(text).toContain('PLAN_OUTPUT_END')
   })
 
   test('should be at bottom after plan output', async () => {
@@ -119,14 +110,19 @@ describeScrollStress('DOM Scroll Manipulation (original failure repro)', () => {
     console.log('After scrollTop=scrollHeight:', JSON.stringify(state))
     expect(state!.isAtBottom).toBe(true)
 
-    await waitForPlanOutput(page)
+    const text = await getTerminalText(page)
+    expect(text).toContain('PLAN_OUTPUT_END')
   })
 
   test('scrollHeight should reflect all content', async () => {
     const state = await getScrollState(page)
     console.log('Final state:', JSON.stringify(state))
 
-    // Content should provide real scrollback on this scenario.
-    expect(state!.hasScrollback).toBe(true)
+    // ~210 lines * ~15.6px = ~3276px minimum scrollHeight
+    expect(state!.scrollHeight).toBeGreaterThan(2000)
+
+    // Should be much larger than viewport
+    const ratio = state!.scrollHeight / state!.clientHeight
+    expect(ratio).toBeGreaterThan(3)
   })
 })
