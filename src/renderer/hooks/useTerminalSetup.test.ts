@@ -285,9 +285,26 @@ describe('useTerminalSetup', () => {
       act(() => { onDataCb!('\u001bc') })
     }
 
-    await act(async () => { await new Promise(r => setTimeout(r, 250)) })
+    await act(async () => { await new Promise(r => setTimeout(r, 450)) })
 
-    expect(mockTerminalWrite).toHaveBeenCalledWith('line one\r\nline two')
+    expect(mockTerminalWrite).toHaveBeenCalledWith(
+      expect.stringContaining('[Restored terminal snapshot from previous app session.]'),
+    )
+    expect(mockTerminalWrite).toHaveBeenCalledWith(
+      expect.stringContaining('[This does not reconnect the underlying OpenCode process.]'),
+    )
+    expect(mockTerminalWrite).toHaveBeenCalledWith(expect.stringContaining('line one\r\nline two'))
+    expect(mockTerminalWrite).toHaveBeenCalledWith(
+      expect.stringContaining('[Injected restore context into the running agent session.]'),
+    )
+    expect(window.pty.write).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.stringContaining('[Auto-restored context] Previous session context:'),
+    )
+    expect(window.pty.write).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.stringMatching(/\r$/),
+    )
   })
 
   it('does not register terminal buffer for non-agent terminals', () => {
@@ -298,6 +315,63 @@ describe('useTerminalSetup', () => {
 
     // eslint-disable-next-line @typescript-eslint/unbound-method
     expect(terminalBufferRegistry.register).not.toHaveBeenCalled()
+  })
+
+  it('does not prefill recap draft for non-agent terminals', async () => {
+    useSessionStore.setState({
+      sessions: [
+        {
+          id: 'session-1',
+          name: 'Test Session',
+          directory: '/test/dir',
+          branch: 'main',
+          status: 'idle',
+          agentId: 'agent-1',
+          panelVisibility: {},
+          showExplorer: true,
+          showFileViewer: false,
+          showDiff: false,
+          selectedFilePath: null,
+          planFilePath: null,
+          fileViewerPosition: 'top',
+          layoutSizes: {
+            explorerWidth: 256,
+            fileViewerSize: 300,
+            userTerminalHeight: 192,
+            diffPanelWidth: 320,
+            tutorialPanelWidth: 320,
+          },
+          explorerFilter: 'files',
+          lastMessage: null,
+          lastMessageTime: null,
+          isUnread: false,
+          workingStartTime: null,
+          recentFiles: [],
+          conversationSnapshot: {
+            format: 'plain-text-v1',
+            content: 'line one\nline two',
+            capturedAt: Date.now(),
+            truncated: false,
+            approxLineCount: 2,
+          },
+          terminalTabs: { tabs: [{ id: 'tab-1', name: 'Terminal' }], activeTabId: null },
+          branchStatus: 'in-progress',
+          isArchived: false,
+        },
+      ],
+    })
+
+    const config = makeConfig({ isAgentTerminal: false })
+    const containerRef = makeContainerRef()
+
+    renderHook(() => useTerminalSetup(config, containerRef))
+
+    await act(async () => { await new Promise(r => setTimeout(r, 300)) })
+
+    expect(window.pty.write).not.toHaveBeenCalledWith(
+      expect.any(String),
+      expect.stringContaining('[Auto-restored context] Previous session context:'),
+    )
   })
 
   it('attaches custom key event handler', () => {
