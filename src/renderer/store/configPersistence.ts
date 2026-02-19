@@ -123,6 +123,8 @@ async function doSave(): Promise<void> {
       lastKnownPrUrl: s.lastKnownPrUrl,
       // Archive state
       isArchived: s.isArchived || undefined,
+      // Conversation restore snapshot
+      conversationSnapshot: s.conversationSnapshot,
     })),
     repos,
     defaultCloneDir: repoState.defaultCloneDir || undefined,
@@ -130,6 +132,15 @@ async function doSave(): Promise<void> {
     sidebarWidth: sessionState.sidebarWidth,
     toolbarPanels: sessionState.toolbarPanels,
   })
+
+  // Mark snapshots clean after successful save
+  if (sessionState.sessions.some((s) => s.conversationSnapshotDirty)) {
+    useSessionStore.setState((state) => ({
+      sessions: state.sessions.map((s) =>
+        s.conversationSnapshotDirty ? { ...s, conversationSnapshotDirty: false } : s
+      ),
+    }))
+  }
 }
 
 // Debounced save — collapses rapid mutations into a single write

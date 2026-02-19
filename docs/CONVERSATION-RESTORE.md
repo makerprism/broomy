@@ -180,6 +180,83 @@ Integration/E2E checks:
 6. Add tests for truncation, ordering, malformed payloads, and checkpoint behavior.
 7. Update docs and release notes.
 
+## Implementation Checklist
+
+Use this checklist as the execution plan for Phase 1.
+
+### 1) Types and Data Contracts
+
+- [ ] Add `conversationSnapshot` to persisted session data type in `src/preload/apis/types.ts`.
+- [ ] Add runtime session fields in `src/renderer/store/sessions.ts`:
+  - [ ] `conversationSnapshot?: ConversationSnapshot`
+  - [ ] `conversationSnapshotDirty?: boolean` (runtime-only)
+- [ ] Ensure compile-time compatibility with existing session fixtures and tests.
+
+Acceptance criteria:
+
+- Typecheck passes with no unsafe casts introduced.
+
+### 2) Persistence Wiring
+
+- [ ] Load `conversationSnapshot` in `src/renderer/store/sessionCoreActions.ts`.
+- [ ] Persist `conversationSnapshot` in `src/renderer/store/configPersistence.ts`.
+- [ ] Keep `conversationSnapshotDirty` runtime-only.
+- [ ] After successful save, clear dirty flags for sessions that were dirty.
+
+Acceptance criteria:
+
+- Saving session config writes snapshot payload when present.
+- Existing configs with no snapshot continue to load.
+
+### 3) Snapshot Builder and Truncation
+
+- [ ] Add helper utility (e.g. `src/renderer/utils/conversationSnapshot.ts`) to:
+  - [ ] Build snapshot payload from terminal buffer text
+  - [ ] Enforce max lines + max bytes
+  - [ ] Trim with UTF-8-safe byte boundaries
+- [ ] Add tests for normal, line-trim, byte-trim, and malformed/empty cases.
+
+Acceptance criteria:
+
+- Utility produces deterministic results for identical input.
+
+### 4) Periodic Checkpoint Capture
+
+- [ ] Add periodic checkpoint logic in `src/renderer/hooks/useSessionLifecycle.ts`.
+- [ ] Capture from `terminalBufferRegistry` for agent sessions.
+- [ ] Update snapshot only if content changed.
+- [ ] Trigger save only when at least one session changed.
+- [ ] Add best-effort flush on window unload.
+
+Acceptance criteria:
+
+- Snapshot updates without requiring other UI mutations.
+- Save frequency stays bounded by checkpoint interval.
+
+### 5) Restore on Terminal Setup
+
+- [ ] In `src/renderer/hooks/useTerminalSetup.ts`, restore snapshot before attaching PTY data listeners.
+- [ ] Keep failures non-fatal and continue terminal startup.
+
+Acceptance criteria:
+
+- On app restart, prior transcript is visible before new output.
+
+### 6) Validation and Regression Testing
+
+- [ ] Add/adjust unit tests for persistence and restore order.
+- [ ] Run `pnpm lint`.
+- [ ] Run `pnpm typecheck`.
+- [ ] Run `pnpm check:all`.
+- [ ] Run `pnpm test:unit`.
+- [ ] Run `pnpm test:unit:coverage`.
+- [ ] Ask user confirmation before running `pnpm test` (E2E).
+
+Acceptance criteria:
+
+- All non-E2E checks pass.
+- E2E passes after user confirmation.
+
 ## Future Enhancements
 
 - Optional "agent resume mode" per agent definition (custom resume arguments).

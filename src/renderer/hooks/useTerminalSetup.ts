@@ -378,6 +378,22 @@ export function useTerminalSetup(
     terminal.open(containerRef.current)
 
     if (isAgent && sessionId) {
+      const session = useSessionStore.getState().sessions.find((item) => item.id === sessionId)
+      const restored = session?.conversationSnapshot?.content
+      if (restored) {
+        try {
+          terminal.write(restored)
+          if (!restored.endsWith('\n')) {
+            terminal.write('\r\n')
+          }
+          terminal.write('\r\n[Conversation restored]\r\n')
+        } catch {
+          // Continue even if restore write fails.
+        }
+      }
+    }
+
+    if (isAgent && sessionId) {
       terminalBufferRegistry.register(sessionId, () => {
         try { return serializeAddon.serialize() } catch { return '' }
       })
