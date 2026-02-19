@@ -22,6 +22,7 @@
     "start:dist": "node scripts/start-dist.cjs",
     "test": "playwright test",
     "test:headed": "E2E_HEADLESS=false playwright test",
+    "test:scroll-stress": "RUN_SCROLL_STRESS=true playwright test tests/terminal-bigplan-scroll.spec.ts tests/terminal-scrolling.spec.ts tests/terminal-scroll-jump.spec.ts tests/terminal-dom-scroll.spec.ts",
     "screenshots": "GENERATE_SCREENSHOTS=true playwright test tests/screenshots.spec.ts",
     "test:unit": "vitest run",
     "test:unit:watch": "vitest",

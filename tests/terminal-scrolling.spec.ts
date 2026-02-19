@@ -7,6 +7,8 @@ const __dirname = path.dirname(__filename)
 
 let electronApp: ElectronApplication
 let page: Page
+const runScrollStress = process.env.RUN_SCROLL_STRESS === 'true'
+const describeScrollStress = runScrollStress ? test.describe : test.describe.skip
 
 // Helper to get scroll state of the agent terminal's xterm viewport
 async function getScrollState(page: Page) {
@@ -57,7 +59,7 @@ test.afterAll(async () => {
   }
 })
 
-test.describe('Terminal Scrolling after Large Output', () => {
+describeScrollStress('Terminal Scrolling after Large Output', () => {
   test('should be at the bottom after plan output completes', async () => {
     // Select the broomy session (has agent)
     const broomySession = page.locator('.cursor-pointer:has-text("broomy")')

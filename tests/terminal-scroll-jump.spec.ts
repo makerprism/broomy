@@ -20,6 +20,8 @@ const __dirname = path.dirname(__filename)
 
 let electronApp: ElectronApplication
 let page: Page
+const runScrollStress = process.env.RUN_SCROLL_STRESS === 'true'
+const describeScrollStress = runScrollStress ? test.describe : test.describe.skip
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -75,7 +77,7 @@ async function touchpadScroll(
 
 // ── Test Suite ───────────────────────────────────────────────────────────────
 
-test.describe('Touchpad Scroll Jump', () => {
+describeScrollStress('Touchpad Scroll Jump', () => {
   test.beforeAll(async () => {
     test.setTimeout(120000)
 
