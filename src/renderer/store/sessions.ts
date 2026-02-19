@@ -26,6 +26,14 @@ export type { BranchStatus, PrState }
 export type SessionStatus = 'working' | 'idle' | 'error'
 export type FileViewerPosition = 'top' | 'left'
 
+export interface ConversationSnapshot {
+  format: 'plain-text-v1'
+  content: string
+  capturedAt: number
+  truncated: boolean
+  approxLineCount: number
+}
+
 // Terminal tab types
 export interface TerminalTab {
   id: string
@@ -86,6 +94,10 @@ export interface Session {
   agentPtyId?: string
   // Recently opened files (runtime, most recent first)
   recentFiles: string[]
+  // Last persisted conversation snapshot for restore
+  conversationSnapshot?: ConversationSnapshot
+  // Whether snapshot changed since last save (runtime only)
+  conversationSnapshotDirty?: boolean
   // User terminal tabs (persisted)
   terminalTabs: TerminalTabsState
   // Direct push to main tracking (persisted)
@@ -156,6 +168,7 @@ interface SessionStore {
   closeTerminalTabsToRight: (sessionId: string, tabId: string) => void
   // Agent PTY tracking (runtime only)
   setAgentPtyId: (sessionId: string, ptyId: string) => void
+  setConversationSnapshot: (sessionId: string, snapshot: ConversationSnapshot) => void
   // Direct push to main tracking
   recordPushToMain: (sessionId: string, commitHash: string) => void
   clearPushToMain: (sessionId: string) => void
@@ -299,6 +312,15 @@ export const useSessionStore = create<SessionStore>((set, get) => {
     )
     set({ sessions: updatedSessions })
     // Don't persist - runtime only
+  },
+
+  setConversationSnapshot: (sessionId: string, snapshot: ConversationSnapshot) => {
+    const { sessions } = get()
+    const updatedSessions = sessions.map((s) =>
+      s.id === sessionId ? { ...s, conversationSnapshot: snapshot, conversationSnapshotDirty: true } : s
+    )
+    set({ sessions: updatedSessions })
+    // Persistence is handled by periodic checkpoint in useSessionLifecycle
   },
 
   // Branch & lifecycle actions (delegated)

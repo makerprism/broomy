@@ -3,6 +3,12 @@ import type { Session } from '../store/sessions'
 import type { ProfileData } from '../store/profiles'
 import { terminalBufferRegistry } from '../utils/terminalBufferRegistry'
 import { loadMonacoProjectContext } from '../utils/monacoProjectContext'
+import { flushSaveNow, scheduleSave } from '../store/configPersistence'
+import { useSessionStore } from '../store/sessions'
+import { buildConversationSnapshot } from '../utils/conversationSnapshot'
+
+const SNAPSHOT_LIMITS = { maxLines: 1500, maxBytes: 250_000 }
+const SNAPSHOT_CHECKPOINT_MS = 20_000
 
 export function useSessionLifecycle({
   sessions,
@@ -38,6 +44,26 @@ export function useSessionLifecycle({
   refreshAllBranches: () => void | Promise<void>
 }) {
   const [directoryExists, setDirectoryExists] = useState<Record<string, boolean>>({})
+  const setConversationSnapshot = useSessionStore((state) => state.setConversationSnapshot)
+
+  const captureConversationSnapshots = useCallback(() => {
+    let hasChanges = false
+    for (const session of sessions) {
+      const buffer = terminalBufferRegistry.getBuffer(session.id)
+      if (!buffer) continue
+
+      const snapshot = buildConversationSnapshot(buffer, SNAPSHOT_LIMITS)
+      if (!snapshot) continue
+      if (session.conversationSnapshot?.content === snapshot.content) continue
+
+      setConversationSnapshot(session.id, snapshot)
+      hasChanges = true
+    }
+
+    if (hasChanges) {
+      scheduleSave()
+    }
+  }, [sessions, setConversationSnapshot])
 
   // Check if session directories exist
   useEffect(() => {
@@ -108,6 +134,22 @@ export function useSessionLifecycle({
 
     return () => clearInterval(interval)
   }, [sessions.length, refreshAllBranches])
+
+  // Periodically checkpoint conversation snapshots for restore on restart.
+  useEffect(() => {
+    const interval = setInterval(captureConversationSnapshots, SNAPSHOT_CHECKPOINT_MS)
+    return () => clearInterval(interval)
+  }, [captureConversationSnapshots])
+
+  // Best-effort final snapshot flush on window close/reload.
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      captureConversationSnapshots()
+      void flushSaveNow()
+    }
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload)
+  }, [captureConversationSnapshots])
 
   // Keyboard shortcut to copy terminal content + summary (Cmd+Shift+C)
   useEffect(() => {

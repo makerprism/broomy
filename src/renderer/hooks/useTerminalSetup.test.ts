@@ -49,15 +49,6 @@ vi.mock('@xterm/addon-fit', () => {
   }
 })
 
-const mockSerializeAddonSerialize = vi.fn().mockReturnValue('')
-vi.mock('@xterm/addon-serialize', () => {
-  return {
-    SerializeAddon: class MockSerializeAddon {
-      serialize = mockSerializeAddonSerialize
-    },
-  }
-})
-
 // Mock the sub-hooks
 vi.mock('./useTerminalKeyboard', () => ({
   useTerminalKeyboard: vi.fn().mockReturnValue(vi.fn().mockReturnValue(true)),
