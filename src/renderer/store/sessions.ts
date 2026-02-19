@@ -169,7 +169,6 @@ interface SessionStore {
   // Agent PTY tracking (runtime only)
   setAgentPtyId: (sessionId: string, ptyId: string) => void
   setConversationSnapshot: (sessionId: string, snapshot: ConversationSnapshot) => void
-  clearConversationSnapshotDirty: (sessionId: string) => void
   // Direct push to main tracking
   recordPushToMain: (sessionId: string, commitHash: string) => void
   clearPushToMain: (sessionId: string) => void
@@ -322,14 +321,6 @@ export const useSessionStore = create<SessionStore>((set, get) => {
     )
     set({ sessions: updatedSessions })
     // Persistence is handled by periodic checkpoint in useSessionLifecycle
-  },
-
-  clearConversationSnapshotDirty: (sessionId: string) => {
-    const { sessions } = get()
-    const updatedSessions = sessions.map((s) =>
-      s.id === sessionId ? { ...s, conversationSnapshotDirty: false } : s
-    )
-    set({ sessions: updatedSessions })
   },
 
   // Branch & lifecycle actions (delegated)

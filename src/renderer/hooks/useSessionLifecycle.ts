@@ -3,7 +3,7 @@ import type { Session } from '../store/sessions'
 import type { ProfileData } from '../store/profiles'
 import { terminalBufferRegistry } from '../utils/terminalBufferRegistry'
 import { loadMonacoProjectContext } from '../utils/monacoProjectContext'
-import { scheduleSave } from '../store/configPersistence'
+import { flushSaveNow, scheduleSave } from '../store/configPersistence'
 import { useSessionStore } from '../store/sessions'
 import { buildConversationSnapshot } from '../utils/conversationSnapshot'
 
@@ -145,6 +145,7 @@ export function useSessionLifecycle({
   useEffect(() => {
     const handleBeforeUnload = () => {
       captureConversationSnapshots()
+      void flushSaveNow()
     }
     window.addEventListener('beforeunload', handleBeforeUnload)
     return () => window.removeEventListener('beforeunload', handleBeforeUnload)

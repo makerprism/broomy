@@ -60,6 +60,38 @@ function migrateToolbarPanels(saved: string[] | undefined): string[] {
 }
 
 const generateId = () => `session-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`
+const MAX_CONVERSATION_SNAPSHOT_BYTES = 250_000
+
+function normalizeConversationSnapshot(
+  snapshot: unknown,
+): Session['conversationSnapshot'] | undefined {
+  if (!snapshot || typeof snapshot !== 'object') return undefined
+
+  const candidate = snapshot as {
+    format?: unknown
+    content?: unknown
+    capturedAt?: unknown
+    truncated?: unknown
+    approxLineCount?: unknown
+  }
+
+  if (candidate.format !== 'plain-text-v1') return undefined
+  if (typeof candidate.content !== 'string' || candidate.content.length === 0) return undefined
+  if (typeof candidate.capturedAt !== 'number') return undefined
+  if (typeof candidate.truncated !== 'boolean') return undefined
+  if (typeof candidate.approxLineCount !== 'number') return undefined
+
+  const byteLength = new TextEncoder().encode(candidate.content).length
+  if (byteLength > MAX_CONVERSATION_SNAPSHOT_BYTES) return undefined
+
+  return {
+    format: candidate.format,
+    content: candidate.content,
+    capturedAt: candidate.capturedAt,
+    truncated: candidate.truncated,
+    approxLineCount: candidate.approxLineCount,
+  }
+}
 
 type StoreGet = () => {
   sessions: Session[]
@@ -164,7 +196,7 @@ export function createCoreActions(get: StoreGet, set: StoreSet) {
             isUnread: false,
             workingStartTime: null,
             recentFiles: [],
-            conversationSnapshot: sessionData.conversationSnapshot,
+            conversationSnapshot: normalizeConversationSnapshot(sessionData.conversationSnapshot),
             conversationSnapshotDirty: false,
             terminalTabs: (sessionData.terminalTabs as TerminalTabsState | undefined) ?? createDefaultTerminalTabs(),
             pushedToMainAt: sessionData.pushedToMainAt,

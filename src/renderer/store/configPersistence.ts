@@ -149,6 +149,16 @@ let saveTimeout: ReturnType<typeof setTimeout> | null = null
 export function scheduleSave(): void {
   if (saveTimeout) clearTimeout(saveTimeout)
   saveTimeout = setTimeout(() => {
+    saveTimeout = null
     void doSave()
   }, 500)
+}
+
+// Runs a save immediately, bypassing debounce.
+export async function flushSaveNow(): Promise<void> {
+  if (saveTimeout) {
+    clearTimeout(saveTimeout)
+    saveTimeout = null
+  }
+  await doSave()
 }
