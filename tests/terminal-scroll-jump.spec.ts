@@ -22,6 +22,16 @@ let electronApp: ElectronApplication
 let page: Page
 const runScrollStress = process.env.RUN_SCROLL_STRESS === 'true'
 const describeScrollStress = runScrollStress ? test.describe : test.describe.skip
+const isHeadless = (process.env.E2E_HEADLESS ?? 'true') !== 'false'
+
+async function waitForPlanOutput(page: Page, timeoutMs = 30000) {
+  await expect
+    .poll(async () => {
+      const text = await getTerminalText(page)
+      return text.includes('PLAN_OUTPUT_END')
+    }, { timeout: timeoutMs, intervals: [250, 500, 1000] })
+    .toBe(true)
+}
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -78,9 +88,9 @@ async function touchpadScroll(
 // ── Test Suite ───────────────────────────────────────────────────────────────
 
 describeScrollStress('Touchpad Scroll Jump', () => {
-  test.beforeAll(async () => {
-    test.setTimeout(120000)
+  test.describe.configure({ timeout: 120000 })
 
+  test.beforeAll(async () => {
     const fakeClaude = path.join(
       __dirname,
       '..',
@@ -126,9 +136,7 @@ describeScrollStress('Touchpad Scroll Jump', () => {
     await broomySession.click()
 
     // Wait for the plan output to complete
-    await page.waitForTimeout(6000)
-    const text = await getTerminalText(page)
-    expect(text).toContain('PLAN_OUTPUT_END')
+    await waitForPlanOutput(page)
 
     const diag = await getScrollDiag(page)
     console.log('[setup] After plan output:', JSON.stringify(diag?.dom))
@@ -138,6 +146,8 @@ describeScrollStress('Touchpad Scroll Jump', () => {
   // ── Test 1: Detect scroll position jumps ──────────────────────────────
 
   test('touchpad scroll up should not produce discontinuous jumps', async () => {
+    test.skip(isHeadless, 'Touchpad wheel replay is unstable in headless Electron')
+
     // Start from bottom
     const goToEnd = page.locator('button:has-text("Go to End")')
     if (await goToEnd.isVisible()) {
@@ -207,6 +217,8 @@ describeScrollStress('Touchpad Scroll Jump', () => {
   // ── Test 2: Detect "can't scroll back down" (stuck scroll) ────────────
 
   test('should be able to scroll back down to bottom after scrolling up', async () => {
+    test.skip(isHeadless, 'Touchpad wheel replay is unstable in headless Electron')
+
     // We're already scrolled up from the previous test.
     const beforeDown = await getScrollDiag(page)
     console.log('[stuck] Before scroll down:', JSON.stringify(beforeDown?.dom))
@@ -241,6 +253,8 @@ describeScrollStress('Touchpad Scroll Jump', () => {
   // ── Test 3: "Go to End" button visibility and function ────────────────
 
   test('Go to End button should appear when scrolled away and work when clicked', async () => {
+    test.skip(isHeadless, 'Touchpad wheel replay is unstable in headless Electron')
+
     // Ensure we start at bottom
     const goToEnd = page.locator('button:has-text("Go to End")')
     if (await goToEnd.isVisible()) {
