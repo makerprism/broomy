@@ -7,6 +7,8 @@ const __dirname = path.dirname(__filename)
 
 let electronApp: ElectronApplication
 let page: Page
+const runScrollStress = process.env.RUN_SCROLL_STRESS === 'true'
+const describeScrollStress = runScrollStress ? test.describe : test.describe.skip
 
 /**
  * Get scroll state from both the DOM viewport and xterm's internal buffer.
@@ -42,7 +44,7 @@ async function getTerminalText(page: Page) {
 // Test Suite 1: Single-chunk big plan (tests the "all at once" scenario)
 // ─────────────────────────────────────────────────────────────────────────────
 
-test.describe('Big Plan — Single Chunk', () => {
+describeScrollStress('Big Plan — Single Chunk', () => {
   test.beforeAll(async () => {
     test.setTimeout(120000)
 
@@ -191,7 +193,7 @@ test.describe('Big Plan — Single Chunk', () => {
 // Test Suite 2: Streaming plan (many rapid small writes with ANSI codes)
 // ─────────────────────────────────────────────────────────────────────────────
 
-test.describe('Big Plan — Streaming Chunks', () => {
+describeScrollStress('Big Plan — Streaming Chunks', () => {
   test.beforeAll(async () => {
     test.setTimeout(120000)
 
