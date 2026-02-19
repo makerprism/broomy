@@ -352,6 +352,9 @@ Terminal scroll stress suites are intentionally opt-in. They are heavier and can
 timing-sensitive on shared developer machines, so they are gated behind
 `RUN_SCROLL_STRESS=true` for deterministic default `pnpm test` runs.
 
+GitHub Actions runs these specs in a dedicated workflow on a nightly schedule and via
+manual dispatch: `.github/workflows/scroll-stress-e2e.yml`.
+
 ### Recommended Workflow
 
 1. Make code changes
