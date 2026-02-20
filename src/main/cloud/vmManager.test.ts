@@ -140,4 +140,71 @@ describe('CloudVmManager', () => {
 
     expect(fetchMock).not.toHaveBeenCalled()
   })
+
+  it('serializes syncSessions calls per profile to avoid stale overlap', async () => {
+    let releaseDelete: (() => void) | undefined
+    const deleteGate = new Promise<void>((resolve) => {
+      releaseDelete = resolve
+    })
+
+    const fetchMock = vi.fn()
+      .mockImplementationOnce(async () => {
+        await deleteGate
+        return mockResponse(204, null)
+      })
+      .mockResolvedValueOnce(mockResponse(200, {
+        id: 'vm-race',
+        ip4: '198.51.100.20',
+        location: 'eu-central-h1',
+        name: 'race-vm',
+        state: 'running',
+        unix_user: 'ubuntu',
+      }))
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    const manager = new CloudVmManager()
+
+    const staleSync = manager.syncSessions('profile-race', [{
+      id: 'session-race',
+      status: 'error',
+      isArchived: true,
+      execution: {
+        mode: 'remote-ssh',
+        provider: 'ubicloud',
+        location: 'eu-central-h1',
+        size: 'standard-2',
+        remoteDir: '~/workspace',
+        unixUser: 'ubuntu',
+        vmName: 'race-vm',
+      },
+    }])
+
+    const latestSync = manager.syncSessions('profile-race', [{
+      id: 'session-race',
+      status: 'working',
+      isArchived: false,
+      execution: {
+        mode: 'remote-ssh',
+        provider: 'ubicloud',
+        location: 'eu-central-h1',
+        size: 'standard-2',
+        remoteDir: '~/workspace',
+        unixUser: 'ubuntu',
+        vmName: 'race-vm',
+      },
+    }])
+
+    await vi.waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+    })
+
+    releaseDelete?.()
+    await staleSync
+    await latestSync
+
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(fetchMock.mock.calls[0]?.[1]).toEqual(expect.objectContaining({ method: 'DELETE' }))
+    expect(fetchMock.mock.calls[1]?.[1]).not.toEqual(expect.objectContaining({ method: 'DELETE' }))
+  })
 })

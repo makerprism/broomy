@@ -151,6 +151,7 @@ export class CloudVmManager {
   private vmsBySession = new Map<string, VmInfo>()
   private idleTimers = new Map<string, NodeJS.Timeout>()
   private inFlight = new Map<string, Promise<void>>()
+  private profileSyncInFlight = new Map<string, Promise<void>>()
 
   private getSessionKey(profileId: string, sessionId: string): string {
     return `${profileId}${SESSION_KEY_SEPARATOR}${sessionId}`
@@ -177,6 +178,17 @@ export class CloudVmManager {
     return next.finally(() => {
       if (this.inFlight.get(sessionKey) === next) {
         this.inFlight.delete(sessionKey)
+      }
+    })
+  }
+
+  private runProfileSyncExclusive(profileId: string, fn: () => Promise<void>): Promise<void> {
+    const previous = this.profileSyncInFlight.get(profileId) ?? Promise.resolve()
+    const next = previous.then(fn, fn)
+    this.profileSyncInFlight.set(profileId, next)
+    return next.finally(() => {
+      if (this.profileSyncInFlight.get(profileId) === next) {
+        this.profileSyncInFlight.delete(profileId)
       }
     })
   }
@@ -284,51 +296,53 @@ export class CloudVmManager {
   }
 
   async syncSessions(profileId: string, snapshots: CloudSessionSnapshot[]): Promise<void> {
-    const nextMap = new Map<string, CloudSessionSnapshot>(
-      snapshots.map((snapshot) => [this.getSessionKey(profileId, snapshot.id), snapshot]),
-    )
+    await this.runProfileSyncExclusive(profileId, async () => {
+      const nextMap = new Map<string, CloudSessionSnapshot>(
+        snapshots.map((snapshot) => [this.getSessionKey(profileId, snapshot.id), snapshot]),
+      )
 
-    for (const snapshot of snapshots) {
-      const sessionKey = this.getSessionKey(profileId, snapshot.id)
-      const previousSnapshot = this.sessions.get(sessionKey)
-      this.sessions.set(sessionKey, snapshot)
-      try {
-        await this.runExclusive(sessionKey, async () => {
-          if (this.shouldStartIdleTimer(snapshot)) {
-            const wasIdleBefore = previousSnapshot && this.shouldStartIdleTimer(previousSnapshot)
-            if (!wasIdleBefore || !this.idleTimers.has(sessionKey)) {
-              this.scheduleIdleTimer(profileId, snapshot.id)
+      for (const snapshot of snapshots) {
+        const sessionKey = this.getSessionKey(profileId, snapshot.id)
+        const previousSnapshot = this.sessions.get(sessionKey)
+        this.sessions.set(sessionKey, snapshot)
+        try {
+          await this.runExclusive(sessionKey, async () => {
+            if (this.shouldStartIdleTimer(snapshot)) {
+              const wasIdleBefore = previousSnapshot && this.shouldStartIdleTimer(previousSnapshot)
+              if (!wasIdleBefore || !this.idleTimers.has(sessionKey)) {
+                this.scheduleIdleTimer(profileId, snapshot.id)
+              }
+              return
             }
-            return
-          }
 
-          this.clearIdleTimer(sessionKey)
+            this.clearIdleTimer(sessionKey)
 
-          if (this.isVmEligible(snapshot)) {
-            await this.ensureVmInternal(sessionKey, profileId, snapshot.id, snapshot)
-            return
-          }
+            if (this.isVmEligible(snapshot)) {
+              await this.ensureVmInternal(sessionKey, profileId, snapshot.id, snapshot)
+              return
+            }
 
-          await this.decommissionVmInternal(sessionKey, snapshot)
-        })
-      } catch (error) {
-        console.warn(`[cloud] Failed syncing session ${snapshot.id}:`, error)
+            await this.decommissionVmInternal(sessionKey, snapshot)
+          })
+        } catch (error) {
+          console.warn(`[cloud] Failed syncing session ${snapshot.id}:`, error)
+        }
       }
-    }
 
-    const profilePrefix = this.getProfilePrefix(profileId)
-    for (const [sessionKey, previous] of this.sessions) {
-      if (!sessionKey.startsWith(profilePrefix) || nextMap.has(sessionKey)) continue
-      const sessionId = this.getSessionIdFromKey(sessionKey)
-      try {
-        await this.runExclusive(sessionKey, async () => {
-          await this.decommissionVmInternal(sessionKey, previous)
-        })
-      } catch (error) {
-        console.warn(`[cloud] Failed decommissioning removed session ${sessionId}:`, error)
+      const profilePrefix = this.getProfilePrefix(profileId)
+      for (const [sessionKey, previous] of this.sessions) {
+        if (!sessionKey.startsWith(profilePrefix) || nextMap.has(sessionKey)) continue
+        const sessionId = this.getSessionIdFromKey(sessionKey)
+        try {
+          await this.runExclusive(sessionKey, async () => {
+            await this.decommissionVmInternal(sessionKey, previous)
+          })
+        } catch (error) {
+          console.warn(`[cloud] Failed decommissioning removed session ${sessionId}:`, error)
+        }
+        this.sessions.delete(sessionKey)
       }
-      this.sessions.delete(sessionKey)
-    }
+    })
   }
 
   async ensureSessionVm(profileId: string, snapshot: CloudSessionSnapshot): Promise<VmInfo> {
@@ -382,6 +396,7 @@ export class CloudVmManager {
     this.vmsBySession.clear()
     this.idleTimers.clear()
     this.inFlight.clear()
+    this.profileSyncInFlight.clear()
   }
 }
 
