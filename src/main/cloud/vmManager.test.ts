@@ -89,4 +89,29 @@ describe('CloudVmManager', () => {
       expect.objectContaining({ method: 'DELETE' }),
     )
   })
+
+  it('uses profile-scoped default VM name when decommissioning without persisted vmName/vmId', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(mockResponse(204, null))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const manager = new CloudVmManager()
+    await manager.syncSessions('team-a', [{
+      id: 'session-no-vmref',
+      status: 'error',
+      isArchived: true,
+      execution: {
+        mode: 'remote-ssh',
+        provider: 'ubicloud',
+        location: 'eu-central-h1',
+        size: 'standard-2',
+        remoteDir: '~/workspace',
+        unixUser: 'ubuntu',
+      },
+    }])
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining('/location/eu-central-h1/vm/broomy-team-a-session-no-vmref'),
+      expect.objectContaining({ method: 'DELETE' }),
+    )
+  })
 })

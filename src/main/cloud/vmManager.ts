@@ -141,13 +141,16 @@ class UbicloudApi {
   }
 }
 
+function getDefaultVmName(profileId: string, sessionId: string): string {
+  return `broomy-${sanitizeName(profileId)}-${sanitizeName(sessionId)}`
+}
+
 export class CloudVmManager {
   private sessions = new Map<string, CloudSessionSnapshot>()
   private vmsBySession = new Map<string, VmInfo>()
+  private sessionProfiles = new Map<string, string>()
   private idleTimers = new Map<string, NodeJS.Timeout>()
   private inFlight = new Map<string, Promise<void>>()
-
-  private profileId = 'default'
 
   private runExclusive(sessionId: string, fn: () => Promise<void>): Promise<void> {
     const previous = this.inFlight.get(sessionId) ?? Promise.resolve()
@@ -203,7 +206,7 @@ export class CloudVmManager {
     throw new Error(`Timed out waiting for VM host address: ${vmReference}`)
   }
 
-  private async ensureVmInternal(sessionId: string, snapshot: CloudSessionSnapshot): Promise<VmInfo> {
+  private async ensureVmInternal(profileId: string, sessionId: string, snapshot: CloudSessionSnapshot): Promise<VmInfo> {
     if (!isRemoteExecution(snapshot.execution)) {
       throw new Error('Session execution is not remote-ssh')
     }
@@ -214,7 +217,7 @@ export class CloudVmManager {
     }
 
     const api = this.getApi()
-    const vmName = snapshot.execution.vmName ?? `broomy-${sanitizeName(this.profileId)}-${sanitizeName(sessionId)}`
+    const vmName = snapshot.execution.vmName ?? getDefaultVmName(profileId, sessionId)
     const location = snapshot.execution.location
 
     let vm = await api.getVm(location, snapshot.execution.vmId ?? vmName)
@@ -244,7 +247,12 @@ export class CloudVmManager {
     }
 
     const location = vmInfo?.location ?? remoteExecution?.location
-    const vmReference = vmInfo?.id ?? remoteExecution?.vmId ?? vmInfo?.name ?? remoteExecution?.vmName
+    const profileId = this.sessionProfiles.get(sessionId) ?? 'default'
+    const vmReference = vmInfo?.id
+      ?? remoteExecution?.vmId
+      ?? vmInfo?.name
+      ?? remoteExecution?.vmName
+      ?? (remoteExecution ? getDefaultVmName(profileId, sessionId) : undefined)
     if (!location || !vmReference) {
       this.vmsBySession.delete(sessionId)
       return
@@ -256,12 +264,12 @@ export class CloudVmManager {
   }
 
   async syncSessions(profileId: string, snapshots: CloudSessionSnapshot[]): Promise<void> {
-    this.profileId = profileId
     const nextMap = new Map<string, CloudSessionSnapshot>(snapshots.map((snapshot) => [snapshot.id, snapshot]))
 
     for (const snapshot of snapshots) {
       const previousSnapshot = this.sessions.get(snapshot.id)
       this.sessions.set(snapshot.id, snapshot)
+      this.sessionProfiles.set(snapshot.id, profileId)
       try {
         await this.runExclusive(snapshot.id, async () => {
           if (this.shouldStartIdleTimer(snapshot)) {
@@ -275,7 +283,7 @@ export class CloudVmManager {
           this.clearIdleTimer(snapshot.id)
 
           if (this.isVmEligible(snapshot)) {
-            await this.ensureVmInternal(snapshot.id, snapshot)
+            await this.ensureVmInternal(profileId, snapshot.id, snapshot)
             return
           }
 
@@ -296,16 +304,17 @@ export class CloudVmManager {
         console.warn(`[cloud] Failed decommissioning removed session ${sessionId}:`, error)
       }
       this.sessions.delete(sessionId)
+      this.sessionProfiles.delete(sessionId)
     }
   }
 
   async ensureSessionVm(profileId: string, snapshot: CloudSessionSnapshot): Promise<VmInfo> {
-    this.profileId = profileId
     this.sessions.set(snapshot.id, snapshot)
+    this.sessionProfiles.set(snapshot.id, profileId)
     let vmInfo: VmInfo | undefined
     await this.runExclusive(snapshot.id, async () => {
       this.clearIdleTimer(snapshot.id)
-      vmInfo = await this.ensureVmInternal(snapshot.id, snapshot)
+      vmInfo = await this.ensureVmInternal(profileId, snapshot.id, snapshot)
     })
     return vmInfo!
   }
@@ -315,6 +324,7 @@ export class CloudVmManager {
     await this.runExclusive(snapshot.id, async () => {
       await this.decommissionVmInternal(snapshot.id, snapshot)
     })
+    this.sessionProfiles.delete(snapshot.id)
   }
 
   async shutdownAll(): Promise<void> {
@@ -325,6 +335,7 @@ export class CloudVmManager {
     const ids = new Set<string>([
       ...this.sessions.keys(),
       ...this.vmsBySession.keys(),
+      ...this.sessionProfiles.keys(),
     ])
 
     await Promise.all(Array.from(ids).map(async (sessionId) => {
@@ -341,6 +352,8 @@ export class CloudVmManager {
         console.warn(`[cloud] Failed to shutdown VM for session ${sessionId}:`, error)
       }
     }))
+
+    this.sessionProfiles.clear()
   }
 }
 

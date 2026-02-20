@@ -103,6 +103,34 @@ function handleDuplicateSession(
   return { existingSessionId: duplicate.id, existingSessionName: duplicate.name, wasArchived }
 }
 
+function findDuplicateSession(
+  existingSessions: Session[],
+  branch: string,
+  directory: string,
+  extra?: { repoId?: string; execution?: Session['execution'] },
+): Session | undefined {
+  if (extra?.execution?.mode === 'remote-ssh') {
+    const remoteExecution = extra.execution
+    return existingSessions.find((s) => {
+      if (s.execution?.mode !== 'remote-ssh') {
+        return false
+      }
+      if (remoteExecution.vmId && s.execution.vmId && s.execution.vmId === remoteExecution.vmId) {
+        return true
+      }
+      if (remoteExecution.vmName && s.execution.vmName && s.execution.vmName === remoteExecution.vmName) {
+        return true
+      }
+      return false
+    })
+  }
+
+  return existingSessions.find((s) =>
+    s.branch === branch &&
+    (s.directory === directory || (extra?.repoId && s.repoId === extra.repoId))
+  )
+}
+
 export function createCoreActions(get: StoreGet, set: StoreSet) {
   const updateSessionBranch = (id: string, branch: string) => {
     const { sessions } = get()
@@ -216,12 +244,9 @@ export function createCoreActions(get: StoreGet, set: StoreSet) {
 
       const branch = isRemoteSession ? 'remote' : await window.git.getBranch(directory)
 
-      // Check for duplicate sessions (active or archived) for the same branch in the same repo
+      // Check for duplicate sessions (active or archived)
       const existingSessions = get().sessions
-      const duplicate = existingSessions.find((s) =>
-        s.branch === branch &&
-        (s.directory === directory || (extra?.repoId && s.repoId === extra.repoId))
-      )
+      const duplicate = findDuplicateSession(existingSessions, branch, directory, extra)
       if (duplicate) {
         return handleDuplicateSession(duplicate, get, set)
       }

@@ -167,6 +167,33 @@ describe('sessionCoreActions', () => {
       expect(useSessionStore.getState().activeSessionId).toBe(existingSession.id)
     })
 
+    it('allows multiple remote sessions with same directory when VM identity differs', async () => {
+      await useSessionStore.getState().addSession('/remote/workspace', 'claude', {
+        execution: {
+          mode: 'remote-ssh',
+          provider: 'ubicloud',
+          location: 'eu-central-h1',
+          size: 'standard-2',
+          remoteDir: '~/workspace',
+          unixUser: 'ubuntu',
+        },
+      })
+
+      const result = await useSessionStore.getState().addSession('/remote/workspace', 'claude', {
+        execution: {
+          mode: 'remote-ssh',
+          provider: 'ubicloud',
+          location: 'eu-central-h1',
+          size: 'standard-2',
+          remoteDir: '~/workspace',
+          unixUser: 'ubuntu',
+        },
+      })
+
+      expect(result).toBeUndefined()
+      expect(useSessionStore.getState().sessions).toHaveLength(2)
+    })
+
   })
 
   describe('removeSession', () => {
