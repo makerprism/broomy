@@ -1,4 +1,5 @@
 import type { ManagedRepo, GitHubIssue } from '../../../preload/index'
+import type { SessionExecution } from '../../store/sessions'
 
 export type View =
   | { type: 'home' }
@@ -9,10 +10,11 @@ export type View =
   | { type: 'repo-settings'; repo: ManagedRepo }
   | { type: 'issues'; repo: ManagedRepo }
   | { type: 'review-prs'; repo: ManagedRepo }
+  | { type: 'cloud' }
   | { type: 'agent-picker'; directory: string; repoId?: string; repoName?: string }
 
 export interface NewSessionDialogProps {
-  onComplete: (directory: string, agentId: string | null, extra?: { repoId?: string; issueNumber?: number; issueTitle?: string; name?: string; sessionType?: 'default' | 'review'; prNumber?: number; prTitle?: string; prUrl?: string; prBaseBranch?: string }) => void
+  onComplete: (directory: string, agentId: string | null, extra?: { repoId?: string; issueNumber?: number; issueTitle?: string; name?: string; sessionType?: 'default' | 'review'; prNumber?: number; prTitle?: string; prUrl?: string; prBaseBranch?: string; execution?: SessionExecution }) => void
   onCancel: () => void
 }
 

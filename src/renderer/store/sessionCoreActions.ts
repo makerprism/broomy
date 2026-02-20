@@ -122,14 +122,18 @@ export function createCoreActions(get: StoreGet, set: StoreSet) {
 
         for (const sessionData of config.sessions) {
           let branch: string
-          try {
-            branch = await window.git.getBranch(sessionData.directory)
-          } catch {
-            console.warn(
-              `[sessions] Failed to get branch for session "${sessionData.name}" ` +
-              `(${sessionData.directory}), using "unknown"`
-            )
-            branch = 'unknown'
+          if (sessionData.execution?.mode === 'remote-ssh') {
+            branch = 'remote'
+          } else {
+            try {
+              branch = await window.git.getBranch(sessionData.directory)
+            } catch {
+              console.warn(
+                `[sessions] Failed to get branch for session "${sessionData.name}" ` +
+                `(${sessionData.directory}), using "unknown"`
+              )
+              branch = 'unknown'
+            }
           }
           const panelVisibility = createPanelVisibilityFromLegacy(sessionData)
 
@@ -173,6 +177,7 @@ export function createCoreActions(get: StoreGet, set: StoreSet) {
             lastKnownPrNumber: sessionData.lastKnownPrNumber,
             lastKnownPrUrl: sessionData.lastKnownPrUrl,
             isArchived: sessionData.isArchived ?? false,
+            execution: sessionData.execution,
           }
           sessions.push(session)
         }
@@ -200,13 +205,16 @@ export function createCoreActions(get: StoreGet, set: StoreSet) {
       }
     },
 
-    addSession: async (directory: string, agentId: string | null, extra?: { repoId?: string; issueNumber?: number; issueTitle?: string; name?: string; sessionType?: 'default' | 'review'; prNumber?: number; prTitle?: string; prUrl?: string; prBaseBranch?: string }): Promise<DuplicateSessionResult | undefined> => {
-      const isGitRepo = await window.git.isGitRepo(directory)
-      if (!isGitRepo) {
-        throw new Error('Selected directory is not a git repository')
+    addSession: async (directory: string, agentId: string | null, extra?: { repoId?: string; issueNumber?: number; issueTitle?: string; name?: string; sessionType?: 'default' | 'review'; prNumber?: number; prTitle?: string; prUrl?: string; prBaseBranch?: string; execution?: Session['execution'] }): Promise<DuplicateSessionResult | undefined> => {
+      const isRemoteSession = extra?.execution?.mode === 'remote-ssh'
+      if (!isRemoteSession) {
+        const isGitRepo = await window.git.isGitRepo(directory)
+        if (!isGitRepo) {
+          throw new Error('Selected directory is not a git repository')
+        }
       }
 
-      const branch = await window.git.getBranch(directory)
+      const branch = isRemoteSession ? 'remote' : await window.git.getBranch(directory)
 
       // Check for duplicate sessions (active or archived) for the same branch in the same repo
       const existingSessions = get().sessions
@@ -219,7 +227,7 @@ export function createCoreActions(get: StoreGet, set: StoreSet) {
       }
 
       let name = extra?.name || basename(directory)
-      if (!extra?.name) {
+      if (!extra?.name && !isRemoteSession) {
         try {
           const remoteUrl = await window.git.remoteUrl(directory)
           if (remoteUrl) {
@@ -233,7 +241,11 @@ export function createCoreActions(get: StoreGet, set: StoreSet) {
       const id = generateId()
 
       const isReview = extra?.sessionType === 'review'
-      const panelVisibility = isReview ? { ...REVIEW_PANEL_VISIBILITY } : { ...DEFAULT_PANEL_VISIBILITY }
+      const panelVisibility = isReview
+        ? { ...REVIEW_PANEL_VISIBILITY }
+        : extra?.execution?.mode === 'remote-ssh'
+          ? { [PANEL_IDS.EXPLORER]: false, [PANEL_IDS.FILE_VIEWER]: false }
+          : { ...DEFAULT_PANEL_VISIBILITY }
       const newSession: Session = {
         id,
         name,
@@ -298,6 +310,7 @@ export function createCoreActions(get: StoreGet, set: StoreSet) {
     refreshAllBranches: async () => {
       const { sessions } = get()
       for (const session of sessions) {
+        if (session.execution?.mode === 'remote-ssh') continue
         const branch = await window.git.getBranch(session.directory)
         if (branch !== session.branch) {
           updateSessionBranch(session.id, branch)

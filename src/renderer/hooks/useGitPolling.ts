@@ -24,6 +24,7 @@ export function useGitPolling({
   // Fetch git status for active session
   const fetchGitStatus = useCallback(async () => {
     if (!activeSession) return
+    if (activeSession.execution?.mode === 'remote-ssh') return
     try {
       const status = await window.git.status(activeSession.directory)
       const normalized = normalizeGitStatus(status)
@@ -79,6 +80,7 @@ export function useGitPolling({
   // Compute branch status whenever git status changes
   useEffect(() => {
     for (const session of sessions) {
+      if (session.execution?.mode === 'remote-ssh') continue
       const gitStatus = gitStatusBySession[session.id]
       if (!gitStatus) continue
 

@@ -27,3 +27,4 @@ Technical documentation for the Broomy codebase. These docs are intended for dev
 | Directory | Description |
 |-----------|-------------|
 | [plans/website/](./plans/website/) | Website planning documents: site overview, visual design system, content copy, technical setup (Next.js), and screenshot generation plan. |
+| [plans/cloud-sessions/](./plans/cloud-sessions/) | Claude Code Cloud (Ubicloud SSH) feature spec: lifecycle rules, VM orchestration, idle decommissioning, and terminal-only remote execution architecture. |

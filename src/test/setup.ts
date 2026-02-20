@@ -20,6 +20,7 @@ import type { GhApi } from '../preload/apis/gh'
 import type { ConfigApi, ProfilesApi, AgentsApi, ReposApi } from '../preload/apis/config'
 import type { ShellApi, DialogApi, AppApi, UpdateApi } from '../preload/apis/shell'
 import type { MenuApi, TsApi } from '../preload/apis/menu'
+import type { CloudApi } from '../preload/apis/cloud'
 
 /** Maps every key of an API type to a Vitest Mock — catches missing/extra keys and non-function values. */
 type Mocked<T> = { [K in keyof T]: Mock }
@@ -179,6 +180,14 @@ const mockDialog: Mocked<DialogApi> = {
   openFolder: vi.fn().mockResolvedValue(null),
 }
 
+// Mock window.cloud
+const mockCloud: Mocked<CloudApi> = {
+  syncSessions: vi.fn().mockResolvedValue({ success: true }),
+  ensureSessionVm: vi.fn().mockResolvedValue({ success: true }),
+  decommissionSessionVm: vi.fn().mockResolvedValue({ success: true }),
+  shutdownAll: vi.fn().mockResolvedValue({ success: true }),
+}
+
 // All Broomy-specific mocks to attach to window
 const broomyMocks = {
   config: mockConfig,
@@ -196,6 +205,7 @@ const broomyMocks = {
   fs: mockFs,
   pty: mockPty,
   dialog: mockDialog,
+  cloud: mockCloud,
 }
 
 // If running in a DOM environment (jsdom/happy-dom), extend the existing window.

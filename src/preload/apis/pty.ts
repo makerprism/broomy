@@ -1,7 +1,8 @@
 import { ipcRenderer } from 'electron'
+import type { SessionExecutionData } from './types'
 
 export type PtyApi = {
-  create: (options: { id: string; cwd: string; command?: string; sessionId?: string; env?: Record<string, string> }) => Promise<{ id: string }>
+  create: (options: { id: string; cwd: string; command?: string; sessionId?: string; profileId?: string; env?: Record<string, string>; execution?: SessionExecutionData }) => Promise<{ id: string }>
   write: (id: string, data: string) => Promise<void>
   resize: (id: string, cols: number, rows: number) => Promise<void>
   kill: (id: string) => Promise<void>

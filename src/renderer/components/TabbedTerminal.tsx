@@ -234,6 +234,7 @@ export default function TabbedTerminal({ sessionId, cwd, isActive, agentCommand,
             cwd={cwd}
             command={agentCommand}
             env={agentEnv}
+            execution={session?.execution}
             isAgentTerminal={!!agentCommand}
             isActive={isActive && activeTabId === AGENT_TAB_ID}
           />
@@ -248,6 +249,7 @@ export default function TabbedTerminal({ sessionId, cwd, isActive, agentCommand,
             <Terminal
               sessionId={`user-${sessionId}-${tab.id}`}
               cwd={cwd}
+              execution={session?.execution}
               isActive={isActive && tab.id === activeTabId}
             />
           </div>

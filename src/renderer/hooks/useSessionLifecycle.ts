@@ -44,6 +44,10 @@ export function useSessionLifecycle({
     const checkDirectories = async () => {
       const results: Record<string, boolean> = {}
       for (const session of sessions) {
+        if (session.execution?.mode === 'remote-ssh') {
+          results[session.id] = true
+          continue
+        }
         results[session.id] = await window.fs.exists(session.directory)
       }
       setDirectoryExists(results)
@@ -78,10 +82,13 @@ export function useSessionLifecycle({
 
   // Load TypeScript project context when active session changes
   useEffect(() => {
+    if (activeSession?.execution?.mode === 'remote-ssh') {
+      return
+    }
     if (activeSession?.directory) {
       void loadMonacoProjectContext(activeSession.directory)
     }
-  }, [activeSession?.directory])
+  }, [activeSession?.directory, activeSession?.execution?.mode])
 
   // Mark session as read when it becomes active, and focus agent terminal
   useEffect(() => {
@@ -108,6 +115,19 @@ export function useSessionLifecycle({
 
     return () => clearInterval(interval)
   }, [sessions.length, refreshAllBranches])
+
+  // Keep cloud VM lifecycle in sync with runtime session state
+  useEffect(() => {
+    const snapshots = sessions.map((session) => ({
+      id: session.id,
+      status: session.status,
+      isArchived: session.isArchived,
+      execution: session.execution,
+    }))
+    void window.cloud.syncSessions(currentProfileId, snapshots).catch(() => {
+      // Cloud sync errors are surfaced when sessions are explicitly created/started.
+    })
+  }, [currentProfileId, sessions])
 
   // Keyboard shortcut to copy terminal content + summary (Cmd+Shift+C)
   useEffect(() => {

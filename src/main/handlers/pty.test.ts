@@ -8,6 +8,7 @@ const mockPtyKill = vi.fn()
 const mockPtyOnData = vi.fn()
 const mockPtyOnExit = vi.fn()
 const mockPtySpawn = vi.fn()
+const mockEnsureSessionVm = vi.fn()
 
 vi.mock('node-pty', () => ({
   spawn: (...args: unknown[]) => mockPtySpawn(...args),
@@ -26,6 +27,12 @@ vi.mock('electron', () => ({
 vi.mock('../platform', () => ({
   isWindows: false,
   getDefaultShell: () => '/bin/zsh',
+}))
+
+vi.mock('../cloud/vmManager', () => ({
+  cloudVmManager: {
+    ensureSessionVm: (...args: unknown[]) => mockEnsureSessionVm(...args),
+  },
 }))
 
 function createMockPtyProcess() {
@@ -81,6 +88,12 @@ describe('pty handlers', () => {
     handlers = {}
     mockPtyOnData.mockReturnValue({ dispose: vi.fn() })
     mockPtyOnExit.mockReturnValue({ dispose: vi.fn() })
+    mockEnsureSessionVm.mockResolvedValue({
+      id: 'vm-1',
+      name: 'broomy-vm',
+      host: '192.0.2.10',
+      location: 'eu-central-h1',
+    })
   })
 
   describe('pty:create', () => {
@@ -461,6 +474,38 @@ describe('pty handlers', () => {
 
       expect(ctx.ptyProcesses.has('no-sender')).toBe(true)
       expect(ctx.ptyOwnerWindows.has('no-sender')).toBe(false)
+    })
+
+    it('uses provided profileId when creating remote SSH PTY', async () => {
+      const { register } = await import('./pty')
+      const ctx = createCtx()
+      register(mockIpcMain as never, ctx)
+
+      const mockProcess = createMockPtyProcess()
+      mockPtySpawn.mockReturnValue(mockProcess)
+      mockBrowserWindowFromWebContents.mockReturnValue(mockSenderWindow)
+
+      await handlers['pty:create'](mockEvent, {
+        id: 'remote-1',
+        sessionId: 'session-remote-1',
+        profileId: 'work-profile',
+        cwd: '/unused-for-remote',
+        execution: {
+          mode: 'remote-ssh',
+          provider: 'ubicloud',
+          location: 'eu-central-h1',
+          size: 'standard-2',
+          remoteDir: '~/workspace',
+          unixUser: 'ubuntu',
+        },
+      })
+
+      expect(mockEnsureSessionVm).toHaveBeenCalledWith('work-profile', expect.objectContaining({ id: 'session-remote-1' }))
+      expect(mockPtySpawn).toHaveBeenCalledWith(
+        'ssh',
+        expect.arrayContaining(['ubuntu@192.0.2.10']),
+        expect.objectContaining({ cwd: process.cwd() }),
+      )
     })
   })
 

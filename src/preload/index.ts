@@ -13,7 +13,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
 // Re-export all types so existing imports from '../../preload/index' still work
-export type { FileEntry, GitFileStatus, GitStatusResult, SearchResult, ManagedRepo, GitHubIssue, GitHubPrStatus, GitHubPrComment, GitHubPrForReview, GitCommitInfo, WorktreeInfo, AgentData, LayoutSizesData, PanelVisibility, SessionData, ConfigData, ProfileData, ProfilesData, MenuItemDef, TsProjectContext } from './apis/types'
+export type { FileEntry, GitFileStatus, GitStatusResult, SearchResult, ManagedRepo, GitHubIssue, GitHubPrStatus, GitHubPrComment, GitHubPrForReview, GitCommitInfo, WorktreeInfo, AgentData, LayoutSizesData, PanelVisibility, SessionExecutionData, SessionData, ConfigData, ProfileData, ProfilesData, MenuItemDef, TsProjectContext } from './apis/types'
 export type { PtyApi } from './apis/pty'
 export type { FsApi } from './apis/fs'
 export type { GitApi } from './apis/git'
@@ -21,6 +21,7 @@ export type { GhApi } from './apis/gh'
 export type { ConfigApi, ProfilesApi, AgentsApi, ReposApi } from './apis/config'
 export type { ShellApi, DialogApi, AppApi, UpdateApi, UpdateCheckResult } from './apis/shell'
 export type { MenuApi, TsApi } from './apis/menu'
+export type { CloudApi, CloudSessionSnapshot } from './apis/cloud'
 
 export type HelpMenuEvent = 'getting-started' | 'shortcuts' | 'reset-tutorial'
 
@@ -44,6 +45,7 @@ import type { GhApi } from './apis/gh'
 import type { ConfigApi, ProfilesApi, AgentsApi, ReposApi } from './apis/config'
 import type { ShellApi, DialogApi, AppApi, UpdateApi } from './apis/shell'
 import type { MenuApi, TsApi } from './apis/menu'
+import type { CloudApi } from './apis/cloud'
 
 // Import API implementations
 import { ptyApi } from './apis/pty'
@@ -53,6 +55,7 @@ import { ghApi } from './apis/gh'
 import { configApi, profilesApi, agentsApi, reposApi } from './apis/config'
 import { shellApi, dialogApi, appApi, updateApi } from './apis/shell'
 import { menuApi, tsApi } from './apis/menu'
+import { cloudApi } from './apis/cloud'
 
 // Expose all APIs to the renderer process via context bridge
 contextBridge.exposeInMainWorld('pty', ptyApi)
@@ -71,6 +74,7 @@ contextBridge.exposeInMainWorld('agents', agentsApi)
 contextBridge.exposeInMainWorld('ts', tsApi)
 contextBridge.exposeInMainWorld('help', helpApi)
 contextBridge.exposeInMainWorld('update', updateApi)
+contextBridge.exposeInMainWorld('cloud', cloudApi)
 
 declare global {
   interface Window {
@@ -90,5 +94,6 @@ declare global {
     ts: TsApi
     help: HelpApi
     update: UpdateApi
+    cloud: CloudApi
   }
 }

@@ -9,6 +9,7 @@ import { RepoSettingsView } from './RepoSettingsView'
 import { IssuesView } from './IssuesView'
 import { ReviewPrsView } from './ReviewPrsView'
 import { AgentPickerView } from './AgentPickerView'
+import { CloudSessionView } from './CloudSessionView'
 
 export function NewSessionDialog({ onComplete, onCancel }: NewSessionDialogProps) {
   const [view, setView] = useState<View>({ type: 'home' })
@@ -29,6 +30,7 @@ export function NewSessionDialog({ onComplete, onCancel }: NewSessionDialogProps
                 setView({ type: 'agent-picker', directory: folderPath })
               }
             }}
+            onCloud={() => setView({ type: 'cloud' })}
             onNewBranch={(repo) => setView({ type: 'new-branch', repo })}
             onExistingBranch={(repo) => setView({ type: 'existing-branch', repo })}
             onRepoSettings={(repo) => setView({ type: 'repo-settings', repo })}
@@ -90,6 +92,12 @@ export function NewSessionDialog({ onComplete, onCancel }: NewSessionDialogProps
             directory={view.directory}
             repoId={view.repoId}
             repoName={view.repoName}
+            onBack={() => setView({ type: 'home' })}
+            onComplete={onComplete}
+          />
+        )}
+        {view.type === 'cloud' && (
+          <CloudSessionView
             onBack={() => setView({ type: 'home' })}
             onComplete={onComplete}
           />

@@ -12,6 +12,7 @@
 import { useRef, useState, useCallback } from 'react'
 import { useTerminalSetup } from '../hooks/useTerminalSetup'
 import type { TerminalConfig } from '../hooks/useTerminalSetup'
+import type { SessionExecution } from '../store/sessions'
 import '@xterm/xterm/css/xterm.css'
 
 interface TerminalProps {
@@ -19,11 +20,12 @@ interface TerminalProps {
   cwd: string
   command?: string
   env?: Record<string, string>
+  execution?: SessionExecution
   isAgentTerminal?: boolean
   isActive?: boolean
 }
 
-export default function Terminal({ sessionId, cwd, command, env, isAgentTerminal = false, isActive = false }: TerminalProps) {
+export default function Terminal({ sessionId, cwd, command, env, execution, isAgentTerminal = false, isActive = false }: TerminalProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [restartKey, setRestartKey] = useState(0)
 
@@ -32,6 +34,7 @@ export default function Terminal({ sessionId, cwd, command, env, isAgentTerminal
     cwd,
     command,
     env,
+    execution,
     isAgentTerminal,
     isActive,
     restartKey,

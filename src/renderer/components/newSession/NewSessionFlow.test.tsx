@@ -71,6 +71,13 @@ describe('NewSessionDialog', () => {
     })
   })
 
+  it('navigates to cloud session view', () => {
+    render(<NewSessionDialog onComplete={vi.fn()} onCancel={vi.fn()} />)
+    fireEvent.click(screen.getByText('Cloud'))
+    expect(screen.getByText('Cloud Session')).toBeTruthy()
+    expect(screen.getByText('Create Cloud Session')).toBeTruthy()
+  })
+
   it('navigates back from clone to home', () => {
     render(<NewSessionDialog onComplete={vi.fn()} onCancel={vi.fn()} />)
     fireEvent.click(screen.getByText('Clone'))

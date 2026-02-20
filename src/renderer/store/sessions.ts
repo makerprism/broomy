@@ -23,6 +23,21 @@ import { createCoreActions, DEFAULT_SIDEBAR_WIDTH } from './sessionCoreActions'
 
 export type { BranchStatus, PrState }
 
+export type SessionExecution =
+  | { mode: 'local' }
+  | {
+      mode: 'remote-ssh'
+      provider: 'ubicloud'
+      location: string
+      size: string
+      remoteDir: string
+      unixUser: string
+      vmName?: string
+      vmId?: string
+      host?: string
+      publicKey?: string
+    }
+
 export type SessionStatus = 'working' | 'idle' | 'error'
 export type FileViewerPosition = 'top' | 'left'
 
@@ -101,6 +116,8 @@ export interface Session {
   lastKnownPrUrl?: string
   // Archive state (persisted)
   isArchived: boolean
+  // Execution mode (persisted)
+  execution?: SessionExecution
 }
 
 // Global panel visibility (sidebar, settings, tutorial)
@@ -123,7 +140,7 @@ interface SessionStore {
 
   // Actions
   loadSessions: (profileId?: string) => Promise<void>
-  addSession: (directory: string, agentId: string | null, extra?: { repoId?: string; issueNumber?: number; issueTitle?: string; name?: string; sessionType?: 'default' | 'review'; prNumber?: number; prTitle?: string; prUrl?: string; prBaseBranch?: string }) => Promise<import('./sessionCoreActions').DuplicateSessionResult | undefined>
+  addSession: (directory: string, agentId: string | null, extra?: { repoId?: string; issueNumber?: number; issueTitle?: string; name?: string; sessionType?: 'default' | 'review'; prNumber?: number; prTitle?: string; prUrl?: string; prBaseBranch?: string; execution?: SessionExecution }) => Promise<import('./sessionCoreActions').DuplicateSessionResult | undefined>
   removeSession: (id: string) => void
   setActiveSession: (id: string | null) => void
   updateSessionBranch: (id: string, branch: string) => void
@@ -248,7 +265,9 @@ export const useSessionStore = create<SessionStore>((set, get) => {
   },
 
   updateAgentMonitor: (id: string, update: { status?: SessionStatus; lastMessage?: string }) => {
-    const { sessions } = get()
+    const { sessions, globalPanelVisibility, sidebarWidth, toolbarPanels } = get()
+    const currentSession = sessions.find((s) => s.id === id)
+    const shouldPersist = update.status === 'idle' && currentSession?.status === 'working' && currentSession.execution?.mode === 'remote-ssh'
     const updatedSessions = sessions.map((s) => {
       if (s.id !== id) return s
       const changes: Partial<Session> = {}
@@ -277,7 +296,9 @@ export const useSessionStore = create<SessionStore>((set, get) => {
       return { ...s, ...changes }
     })
     set({ sessions: updatedSessions })
-    // Don't persist runtime monitoring state
+    if (shouldPersist) {
+      debouncedSave(updatedSessions, globalPanelVisibility, sidebarWidth, toolbarPanels)
+    }
   },
 
   markSessionRead: (id: string) => {

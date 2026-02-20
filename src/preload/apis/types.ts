@@ -111,6 +111,21 @@ export type LayoutSizesData = {
 
 export type PanelVisibility = Record<string, boolean>
 
+export type SessionExecutionData =
+  | { mode: 'local' }
+  | {
+      mode: 'remote-ssh'
+      provider: 'ubicloud'
+      location: string
+      size: string
+      remoteDir: string
+      unixUser: string
+      vmName?: string
+      vmId?: string
+      host?: string
+      publicKey?: string
+    }
+
 export type SessionData = {
   id: string
   name: string
@@ -146,6 +161,8 @@ export type SessionData = {
   hasHadCommits?: boolean
   // Archive state
   isArchived?: boolean
+  // Execution mode
+  execution?: SessionExecutionData
 }
 
 export type ConfigData = {

@@ -11,7 +11,7 @@ interface AppCallbacksDeps {
   activeSessionId: string | null
   agents: AgentConfig[]
   repos: { id: string; rootDir: string; defaultBranch: string }[]
-  addSession: (directory: string, agentId: string | null, extra?: { repoId?: string; issueNumber?: number; issueTitle?: string; name?: string; sessionType?: 'default' | 'review'; prNumber?: number; prTitle?: string; prUrl?: string; prBaseBranch?: string }) => Promise<DuplicateSessionResult | undefined>
+  addSession: (directory: string, agentId: string | null, extra?: { repoId?: string; issueNumber?: number; issueTitle?: string; name?: string; sessionType?: 'default' | 'review'; prNumber?: number; prTitle?: string; prUrl?: string; prBaseBranch?: string; execution?: Session['execution'] }) => Promise<DuplicateSessionResult | undefined>
   removeSession: (id: string) => void
   setActiveSession: (id: string | null) => void
   togglePanel: (sessionId: string, panelId: string) => void
@@ -46,7 +46,7 @@ export function useAppCallbacks({
   const handleNewSessionComplete = useCallback(async (
     directory: string,
     agentId: string | null,
-    extra?: { repoId?: string; issueNumber?: number; issueTitle?: string; name?: string; sessionType?: 'default' | 'review'; prNumber?: number; prTitle?: string; prUrl?: string; prBaseBranch?: string }
+    extra?: { repoId?: string; issueNumber?: number; issueTitle?: string; name?: string; sessionType?: 'default' | 'review'; prNumber?: number; prTitle?: string; prUrl?: string; prBaseBranch?: string; execution?: Session['execution'] }
   ) => {
     try {
       const result = await addSession(directory, agentId, extra)
@@ -65,6 +65,7 @@ export function useAppCallbacks({
 
   const refreshPrStatus = useCallback(async () => {
     for (const session of sessions) {
+      if (session.execution?.mode === 'remote-ssh') continue
       try {
         const prResult = await window.gh.prStatus(session.directory)
         if (prResult) {
@@ -117,6 +118,14 @@ export function useAppCallbacks({
   const handleDeleteSession = useCallback((id: string, deleteWorktree: boolean) => {
     // Remove session immediately for responsive UI
     const session = sessions.find(s => s.id === id)
+    if (session?.execution?.mode === 'remote-ssh') {
+      void window.cloud.decommissionSessionVm({
+        id: session.id,
+        status: session.status,
+        isArchived: true,
+        execution: session.execution,
+      })
+    }
     removeSession(id)
 
     // Clean up worktree and branch in background (non-blocking)

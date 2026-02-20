@@ -193,6 +193,11 @@ function SessionCard({
         ) : (
           <BranchStatusChip status={session.branchStatus} />
         )}
+        {session.execution?.mode === 'remote-ssh' && (
+          <span className="px-1.5 py-0.5 text-[10px] font-semibold rounded bg-sky-500/20 text-sky-300 flex-shrink-0">
+            Cloud
+          </span>
+        )}
         {session.prNumber && (
           <span className="text-purple-400 flex-shrink-0">PR #{session.prNumber}</span>
         )}

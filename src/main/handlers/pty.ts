@@ -4,9 +4,16 @@ import { homedir } from 'os'
 import * as pty from 'node-pty'
 import { isWindows, getDefaultShell } from '../platform'
 import { HandlerContext } from './types'
+import { cloudVmManager } from '../cloud/vmManager'
+import type { SessionExecutionData } from '../../preload/apis/types'
+
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, `'"'"'`)}'`
+}
 
 export function register(ipcMain: IpcMain, ctx: HandlerContext): void {
-  ipcMain.handle('pty:create', (_event, options: { id: string; cwd: string; command?: string; sessionId?: string; env?: Record<string, string> }) => {
+  // eslint-disable-next-line complexity
+  ipcMain.handle('pty:create', async (_event, options: { id: string; cwd: string; command?: string; sessionId?: string; profileId?: string; env?: Record<string, string>; execution?: SessionExecutionData }) => {
     // Find the sender window
     const senderWindow = BrowserWindow.fromWebContents(_event.sender)
     // In E2E test mode, use a controlled shell that won't run real commands
@@ -55,12 +62,6 @@ export function register(ipcMain: IpcMain, ctx: HandlerContext): void {
     } else {
       shell = getDefaultShell()
       shellArgs = []
-      // Pass agent command as shell args so it runs after the shell profile loads,
-      // instead of writing it to the PTY after a blind delay.
-      if (initialCommand && !isWindows) {
-        shellArgs = ['-l', '-i', '-c', initialCommand]
-        initialCommand = undefined
-      }
     }
 
     // Start with process.env, but remove env vars that should be explicitly configured
@@ -100,11 +101,62 @@ export function register(ipcMain: IpcMain, ctx: HandlerContext): void {
       ...agentEnv,  // Agent-specific env vars override base env
     } as Record<string, string>
 
+    if (!ctx.isE2ETest && options.execution?.mode === 'remote-ssh') {
+      const remoteExecution = options.execution
+      const remoteSessionId = options.sessionId ?? options.id
+      const ensureResult = await cloudVmManager.ensureSessionVm(options.profileId ?? 'default', {
+        id: remoteSessionId,
+        status: 'working',
+        isArchived: false,
+        execution: remoteExecution,
+      })
+
+      const remoteHost = ensureResult.host
+      if (!remoteHost) {
+        throw new Error(`Ubicloud VM did not provide an SSH host for session ${remoteSessionId}`)
+      }
+
+      const exports = Object.entries(agentEnv)
+        .map(([key, value]) => `export ${key}=${shellQuote(value)}`)
+        .join('; ')
+      const remoteParts = [
+        `mkdir -p ${shellQuote(remoteExecution.remoteDir)}`,
+        `cd ${shellQuote(remoteExecution.remoteDir)}`,
+      ]
+      if (exports) {
+        remoteParts.push(exports)
+      }
+      if (initialCommand) {
+        remoteParts.push(initialCommand)
+      } else {
+        remoteParts.push('exec "$SHELL" -l')
+      }
+      const remoteCommand = remoteParts.join('; ')
+
+      shell = 'ssh'
+      shellArgs = [
+        '-tt',
+        '-o', 'ServerAliveInterval=30',
+        '-o', 'ServerAliveCountMax=3',
+        '-o', 'ConnectTimeout=15',
+        `${remoteExecution.unixUser}@${remoteHost}`,
+        'bash',
+        '-lc',
+        remoteCommand,
+      ]
+      initialCommand = undefined
+    } else if (!ctx.isE2ETest && initialCommand && !isWindows) {
+      // Pass agent command as shell args so it runs after the shell profile loads,
+      // instead of writing it to the PTY after a blind delay.
+      shellArgs = ['-l', '-i', '-c', initialCommand]
+      initialCommand = undefined
+    }
+
     const ptyProcess = pty.spawn(shell, shellArgs, {
       name: 'xterm-256color',
       cols: 80,
       rows: 30,
-      cwd: options.cwd,
+      cwd: options.execution?.mode === 'remote-ssh' ? process.cwd() : options.cwd,
       env,
     })
 

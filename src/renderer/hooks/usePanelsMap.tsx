@@ -142,20 +142,25 @@ export function usePanelsMap(config: PanelsMapConfig) {
 
   const terminalPanel = useMemo(() => (
     <div className="h-full w-full relative">
-      {sessions.map((session) => (
+      {sessions.map((session) => {
+        const terminalCwd = session.execution?.mode === 'remote-ssh'
+          ? session.execution.remoteDir
+          : session.directory
+        return (
         <div
           key={session.id}
           className={`absolute inset-0 ${session.id === activeSessionId ? '' : 'hidden'}`}
         >
           <TabbedTerminal
             sessionId={session.id}
-            cwd={session.directory}
+            cwd={terminalCwd}
             isActive={session.id === activeSessionId}
             agentCommand={getAgentCommand(session)}
             agentEnv={getAgentEnv(session)}
           />
         </div>
-      ))}
+        )
+      })}
       {sessions.length === 0 && (
         <WelcomeScreen onNewSession={handleNewSession} />
       )}

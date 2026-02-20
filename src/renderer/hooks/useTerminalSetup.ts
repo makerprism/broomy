@@ -4,6 +4,8 @@ import { FitAddon } from '@xterm/addon-fit'
 import { SerializeAddon } from '@xterm/addon-serialize'
 import { useErrorStore } from '../store/errors'
 import { useSessionStore } from '../store/sessions'
+import { useProfileStore } from '../store/profiles'
+import type { SessionExecution } from '../store/sessions'
 import { terminalBufferRegistry } from '../utils/terminalBufferRegistry'
 import { useTerminalKeyboard } from './useTerminalKeyboard'
 import { usePlanDetection } from './usePlanDetection'
@@ -14,6 +16,7 @@ export interface TerminalConfig {
   cwd: string
   command: string | undefined
   env: Record<string, string> | undefined
+  execution: SessionExecution | undefined
   isAgentTerminal: boolean
   isActive: boolean
   restartKey: number
@@ -250,7 +253,7 @@ function createScrollTracking(
 // ── Terminal state hook (refs, store wiring, callbacks) ──────────────
 
 function useTerminalState(config: TerminalConfig) {
-  const { sessionId, command, env, isAgentTerminal, cwd } = config
+  const { sessionId, command, env, execution, isAgentTerminal, cwd } = config
 
   const terminalRef = useRef<XTerm | null>(null)
   const fitAddonRef = useRef<FitAddon | null>(null)
@@ -269,14 +272,19 @@ function useTerminalState(config: TerminalConfig) {
   commandRef.current = command
   const envRef = useRef(env)
   envRef.current = env
+  const executionRef = useRef(execution)
+  executionRef.current = execution
   const isAgentTerminalRef = useRef(isAgentTerminal)
   isAgentTerminalRef.current = isAgentTerminal
   const cwdRef = useRef(cwd)
   cwdRef.current = cwd
 
   const { addError } = useErrorStore()
+  const currentProfileId = useProfileStore((state) => state.currentProfileId)
   const addErrorRef = useRef(addError)
   addErrorRef.current = addError
+  const currentProfileIdRef = useRef(currentProfileId)
+  currentProfileIdRef.current = currentProfileId
   const updateAgentMonitor = useSessionStore((state) => state.updateAgentMonitor)
   const markSessionRead = useSessionStore((state) => state.markSessionRead)
   const setPlanFile = useSessionStore((state) => state.setPlanFile)
@@ -325,9 +333,9 @@ function useTerminalState(config: TerminalConfig) {
     updateTimeoutRef, idleTimeoutRef, lastStatusRef,
     lastUserInputRef, lastInteractionRef, ptyIdRef, isFollowingRef,
     showScrollButton, setShowScrollButton,
-    commandRef, envRef, isAgentTerminalRef, cwdRef,
+    commandRef, envRef, executionRef, isAgentTerminalRef, cwdRef,
     addErrorRef, updateAgentMonitorRef, markSessionReadRef,
-    sessionIdRef, setAgentPtyId,
+    sessionIdRef, setAgentPtyId, currentProfileIdRef,
     handleKeyEvent, processPlanDetection,
     scheduleUpdate, handleScrollToBottom,
   }
@@ -353,6 +361,7 @@ export function useTerminalSetup(
     const isAgent = s.isAgentTerminalRef.current
     const cmd = s.commandRef.current
     const envVars = s.envRef.current
+    const execution = s.executionRef.current
     const effectCwd = s.cwdRef.current
     const effectStartTime = Date.now()
 
@@ -410,7 +419,15 @@ export function useTerminalSetup(
     const id = `${sessionId}-${Date.now()}`
     s.ptyIdRef.current = id
 
-    window.pty.create({ id, cwd: effectCwd, command: cmd, sessionId, env: envVars })
+    window.pty.create({
+      id,
+      cwd: effectCwd,
+      command: cmd,
+      sessionId,
+      profileId: s.currentProfileIdRef.current,
+      env: envVars,
+      execution,
+    })
       .then(() => {
         if (isAgentTerminal && sessionId) s.setAgentPtyId(sessionId, id)
 

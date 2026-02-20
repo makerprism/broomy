@@ -19,6 +19,7 @@ import * as pty from 'node-pty'
 import { isWindows, isMac } from './platform'
 import { registerAllHandlers, HandlerContext, PROFILES_FILE } from './handlers'
 import { resolveShellEnv } from './shellEnv'
+import { cloudVmManager } from './cloud/vmManager'
 
 // Ensure app name is correct (in dev mode Electron defaults to "Electron")
 app.name = 'Broomy'
@@ -343,4 +344,20 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit()
   }
+})
+
+let isQuittingAfterCloudShutdown = false
+app.on('before-quit', (event) => {
+  if (isQuittingAfterCloudShutdown || isE2ETest) {
+    return
+  }
+
+  event.preventDefault()
+  void Promise.race([
+    cloudVmManager.shutdownAll(),
+    new Promise((resolve) => setTimeout(resolve, 60_000)),
+  ]).finally(() => {
+    isQuittingAfterCloudShutdown = true
+    app.quit()
+  })
 })

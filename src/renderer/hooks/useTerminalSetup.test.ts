@@ -102,6 +102,7 @@ function makeConfig(overrides: Partial<TerminalConfig> = {}): TerminalConfig {
     cwd: '/test/dir',
     command: undefined,
     env: undefined,
+    execution: undefined,
     isAgentTerminal: false,
     isActive: true,
     restartKey: 0,

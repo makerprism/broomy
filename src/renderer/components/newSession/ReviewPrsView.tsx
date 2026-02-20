@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useAgentStore } from '../../store/agents'
 import type { ManagedRepo, GitHubPrForReview } from '../../../preload/index'
+import type { SessionExecution } from '../../store/sessions'
 import { DialogErrorBanner } from '../ErrorBanner'
 
 async function createReviewWorktree(repo: ManagedRepo, pr: GitHubPrForReview): Promise<{ worktreePath: string; error?: string }> {
@@ -66,7 +67,7 @@ export function ReviewPrsView({
 }: {
   repo: ManagedRepo
   onBack: () => void
-  onComplete: (directory: string, agentId: string | null, extra?: { repoId?: string; name?: string; sessionType?: 'default' | 'review'; prNumber?: number; prTitle?: string; prUrl?: string; prBaseBranch?: string }) => void
+  onComplete: (directory: string, agentId: string | null, extra?: { repoId?: string; name?: string; sessionType?: 'default' | 'review'; prNumber?: number; prTitle?: string; prUrl?: string; prBaseBranch?: string; execution?: SessionExecution }) => void
 }) {
   const { agents } = useAgentStore()
 

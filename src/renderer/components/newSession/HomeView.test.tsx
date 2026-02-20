@@ -22,6 +22,7 @@ function makeProps(overrides: Record<string, unknown> = {}) {
     onClone: vi.fn(),
     onAddExistingRepo: vi.fn(),
     onOpenFolder: vi.fn(),
+    onCloud: vi.fn(),
     onNewBranch: vi.fn(),
     onExistingBranch: vi.fn(),
     onRepoSettings: vi.fn(),
@@ -39,11 +40,12 @@ describe('HomeView', () => {
     expect(screen.getByText('New Session')).toBeTruthy()
   })
 
-  it('renders Clone, Add Repo, and Folder buttons', () => {
+  it('renders Clone, Add Repo, Folder, and Cloud buttons', () => {
     render(<HomeView {...makeProps()} />)
     expect(screen.getByText('Clone')).toBeTruthy()
     expect(screen.getByText('Add Repo')).toBeTruthy()
     expect(screen.getByText('Folder')).toBeTruthy()
+    expect(screen.getByText('Cloud')).toBeTruthy()
   })
 
   it('calls onClone when Clone is clicked', () => {
@@ -65,6 +67,13 @@ describe('HomeView', () => {
     render(<HomeView {...props} />)
     fireEvent.click(screen.getByText('Folder'))
     expect(props.onOpenFolder).toHaveBeenCalled()
+  })
+
+  it('calls onCloud when Cloud is clicked', () => {
+    const props = makeProps()
+    render(<HomeView {...props} />)
+    fireEvent.click(screen.getByText('Cloud'))
+    expect(props.onCloud).toHaveBeenCalled()
   })
 
   it('calls onCancel when Cancel is clicked', () => {

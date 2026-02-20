@@ -123,6 +123,8 @@ async function doSave(): Promise<void> {
       lastKnownPrUrl: s.lastKnownPrUrl,
       // Archive state
       isArchived: s.isArchived || undefined,
+      // Execution mode
+      execution: s.execution,
     })),
     repos,
     defaultCloneDir: repoState.defaultCloneDir || undefined,

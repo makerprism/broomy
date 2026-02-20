@@ -5,6 +5,7 @@ export function HomeView({
   onClone,
   onAddExistingRepo,
   onOpenFolder,
+  onCloud,
   onNewBranch,
   onExistingBranch,
   onRepoSettings,
@@ -16,6 +17,7 @@ export function HomeView({
   onClone: () => void
   onAddExistingRepo: () => void
   onOpenFolder: () => void
+  onCloud: () => void
   onNewBranch: (repo: ManagedRepo) => void
   onExistingBranch: (repo: ManagedRepo) => void
   onRepoSettings: (repo: ManagedRepo) => void
@@ -35,7 +37,7 @@ export function HomeView({
 
       <div className="p-4 space-y-4">
         {/* Action buttons */}
-        <div className="flex gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           <button
             onClick={onClone}
             className="flex-1 flex flex-col items-center justify-center gap-1 p-3 rounded border border-border bg-bg-primary hover:bg-bg-tertiary hover:border-accent transition-colors text-sm font-medium text-text-primary"
@@ -56,12 +58,21 @@ export function HomeView({
           </button>
           <button
             onClick={onOpenFolder}
-            className="flex-1 flex flex-col items-center justify-center gap-1 p-3 rounded border border-border bg-bg-primary hover:bg-bg-tertiary hover:border-accent transition-colors text-sm font-medium text-text-primary"
+            className="flex flex-col items-center justify-center gap-1 p-3 rounded border border-border bg-bg-primary hover:bg-bg-tertiary hover:border-accent transition-colors text-sm font-medium text-text-primary"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
             </svg>
             Folder
+          </button>
+          <button
+            onClick={onCloud}
+            className="flex flex-col items-center justify-center gap-1 p-3 rounded border border-border bg-bg-primary hover:bg-bg-tertiary hover:border-accent transition-colors text-sm font-medium text-text-primary"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 15a4 4 0 014-4 5 5 0 019.9 1H17a4 4 0 110 8H7a4 4 0 01-4-4z" />
+            </svg>
+            Cloud
           </button>
         </div>
 
