@@ -27,6 +27,7 @@ type UbicloudVm = {
 
 const UBICLOUD_BASE_URL = 'https://api.ubicloud.com'
 const IDLE_DECOMMISSION_MS = 5 * 60 * 1000
+const SESSION_KEY_SEPARATOR = '\u001f'
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -148,17 +149,34 @@ function getDefaultVmName(profileId: string, sessionId: string): string {
 export class CloudVmManager {
   private sessions = new Map<string, CloudSessionSnapshot>()
   private vmsBySession = new Map<string, VmInfo>()
-  private sessionProfiles = new Map<string, string>()
   private idleTimers = new Map<string, NodeJS.Timeout>()
   private inFlight = new Map<string, Promise<void>>()
 
-  private runExclusive(sessionId: string, fn: () => Promise<void>): Promise<void> {
-    const previous = this.inFlight.get(sessionId) ?? Promise.resolve()
+  private getSessionKey(profileId: string, sessionId: string): string {
+    return `${profileId}${SESSION_KEY_SEPARATOR}${sessionId}`
+  }
+
+  private getSessionIdFromKey(sessionKey: string): string {
+    const index = sessionKey.indexOf(SESSION_KEY_SEPARATOR)
+    return index >= 0 ? sessionKey.slice(index + SESSION_KEY_SEPARATOR.length) : sessionKey
+  }
+
+  private getProfileIdFromKey(sessionKey: string): string {
+    const index = sessionKey.indexOf(SESSION_KEY_SEPARATOR)
+    return index >= 0 ? sessionKey.slice(0, index) : 'default'
+  }
+
+  private getProfilePrefix(profileId: string): string {
+    return `${profileId}${SESSION_KEY_SEPARATOR}`
+  }
+
+  private runExclusive(sessionKey: string, fn: () => Promise<void>): Promise<void> {
+    const previous = this.inFlight.get(sessionKey) ?? Promise.resolve()
     const next = previous.then(fn, fn)
-    this.inFlight.set(sessionId, next)
+    this.inFlight.set(sessionKey, next)
     return next.finally(() => {
-      if (this.inFlight.get(sessionId) === next) {
-        this.inFlight.delete(sessionId)
+      if (this.inFlight.get(sessionKey) === next) {
+        this.inFlight.delete(sessionKey)
       }
     })
   }
@@ -167,11 +185,11 @@ export class CloudVmManager {
     return new UbicloudApi()
   }
 
-  private clearIdleTimer(sessionId: string): void {
-    const timer = this.idleTimers.get(sessionId)
+  private clearIdleTimer(sessionKey: string): void {
+    const timer = this.idleTimers.get(sessionKey)
     if (timer) {
       clearTimeout(timer)
-      this.idleTimers.delete(sessionId)
+      this.idleTimers.delete(sessionKey)
     }
   }
 
@@ -183,16 +201,17 @@ export class CloudVmManager {
     return isRemoteExecution(snapshot.execution) && !snapshot.isArchived && snapshot.status === 'idle'
   }
 
-  private scheduleIdleTimer(sessionId: string): void {
-    this.clearIdleTimer(sessionId)
+  private scheduleIdleTimer(profileId: string, sessionId: string): void {
+    const sessionKey = this.getSessionKey(profileId, sessionId)
+    this.clearIdleTimer(sessionKey)
     const timer = setTimeout(() => {
-      void this.runExclusive(sessionId, async () => {
-        const latest = this.sessions.get(sessionId)
+      void this.runExclusive(sessionKey, async () => {
+        const latest = this.sessions.get(sessionKey)
         if (!latest || !this.shouldStartIdleTimer(latest)) return
-        await this.decommissionVmInternal(sessionId, latest)
+        await this.decommissionVmInternal(sessionKey, latest)
       })
     }, IDLE_DECOMMISSION_MS)
-    this.idleTimers.set(sessionId, timer)
+    this.idleTimers.set(sessionKey, timer)
   }
 
   private async waitForVmHost(api: UbicloudApi, location: string, vmReference: string): Promise<UbicloudVm> {
@@ -206,12 +225,12 @@ export class CloudVmManager {
     throw new Error(`Timed out waiting for VM host address: ${vmReference}`)
   }
 
-  private async ensureVmInternal(profileId: string, sessionId: string, snapshot: CloudSessionSnapshot): Promise<VmInfo> {
+  private async ensureVmInternal(sessionKey: string, profileId: string, sessionId: string, snapshot: CloudSessionSnapshot): Promise<VmInfo> {
     if (!isRemoteExecution(snapshot.execution)) {
       throw new Error('Session execution is not remote-ssh')
     }
 
-    const existing = this.vmsBySession.get(sessionId)
+    const existing = this.vmsBySession.get(sessionKey)
     if (existing?.host) {
       return existing
     }
@@ -232,128 +251,137 @@ export class CloudVmManager {
       host: readyVm.ip4 ?? undefined,
       location: readyVm.location,
     }
-    this.vmsBySession.set(sessionId, vmInfo)
+    this.vmsBySession.set(sessionKey, vmInfo)
     return vmInfo
   }
 
-  private async decommissionVmInternal(sessionId: string, snapshot: CloudSessionSnapshot): Promise<void> {
-    this.clearIdleTimer(sessionId)
-    const vmInfo = this.vmsBySession.get(sessionId)
+  private async decommissionVmInternal(sessionKey: string, snapshot: CloudSessionSnapshot): Promise<void> {
+    this.clearIdleTimer(sessionKey)
+    const vmInfo = this.vmsBySession.get(sessionKey)
     const execution = snapshot.execution
     const remoteExecution = isRemoteExecution(execution) ? execution : undefined
+    const sessionId = this.getSessionIdFromKey(sessionKey)
     if (!remoteExecution && !vmInfo) {
-      this.vmsBySession.delete(sessionId)
+      this.vmsBySession.delete(sessionKey)
       return
     }
 
     const location = vmInfo?.location ?? remoteExecution?.location
-    const profileId = this.sessionProfiles.get(sessionId) ?? 'default'
+    const profileId = this.getProfileIdFromKey(sessionKey)
     const vmReference = vmInfo?.id
       ?? remoteExecution?.vmId
       ?? vmInfo?.name
       ?? remoteExecution?.vmName
       ?? (remoteExecution ? getDefaultVmName(profileId, sessionId) : undefined)
     if (!location || !vmReference) {
-      this.vmsBySession.delete(sessionId)
+      this.vmsBySession.delete(sessionKey)
       return
     }
 
     const api = this.getApi()
     await api.deleteVm(location, vmReference)
-    this.vmsBySession.delete(sessionId)
+    this.vmsBySession.delete(sessionKey)
   }
 
   async syncSessions(profileId: string, snapshots: CloudSessionSnapshot[]): Promise<void> {
-    const nextMap = new Map<string, CloudSessionSnapshot>(snapshots.map((snapshot) => [snapshot.id, snapshot]))
+    const nextMap = new Map<string, CloudSessionSnapshot>(
+      snapshots.map((snapshot) => [this.getSessionKey(profileId, snapshot.id), snapshot]),
+    )
 
     for (const snapshot of snapshots) {
-      const previousSnapshot = this.sessions.get(snapshot.id)
-      this.sessions.set(snapshot.id, snapshot)
-      this.sessionProfiles.set(snapshot.id, profileId)
+      const sessionKey = this.getSessionKey(profileId, snapshot.id)
+      const previousSnapshot = this.sessions.get(sessionKey)
+      this.sessions.set(sessionKey, snapshot)
       try {
-        await this.runExclusive(snapshot.id, async () => {
+        await this.runExclusive(sessionKey, async () => {
           if (this.shouldStartIdleTimer(snapshot)) {
             const wasIdleBefore = previousSnapshot && this.shouldStartIdleTimer(previousSnapshot)
-            if (!wasIdleBefore || !this.idleTimers.has(snapshot.id)) {
-              this.scheduleIdleTimer(snapshot.id)
+            if (!wasIdleBefore || !this.idleTimers.has(sessionKey)) {
+              this.scheduleIdleTimer(profileId, snapshot.id)
             }
             return
           }
 
-          this.clearIdleTimer(snapshot.id)
+          this.clearIdleTimer(sessionKey)
 
           if (this.isVmEligible(snapshot)) {
-            await this.ensureVmInternal(profileId, snapshot.id, snapshot)
+            await this.ensureVmInternal(sessionKey, profileId, snapshot.id, snapshot)
             return
           }
 
-          await this.decommissionVmInternal(snapshot.id, snapshot)
+          await this.decommissionVmInternal(sessionKey, snapshot)
         })
       } catch (error) {
         console.warn(`[cloud] Failed syncing session ${snapshot.id}:`, error)
       }
     }
 
-    for (const [sessionId, previous] of this.sessions) {
-      if (nextMap.has(sessionId)) continue
+    const profilePrefix = this.getProfilePrefix(profileId)
+    for (const [sessionKey, previous] of this.sessions) {
+      if (!sessionKey.startsWith(profilePrefix) || nextMap.has(sessionKey)) continue
+      const sessionId = this.getSessionIdFromKey(sessionKey)
       try {
-        await this.runExclusive(sessionId, async () => {
-          await this.decommissionVmInternal(sessionId, previous)
+        await this.runExclusive(sessionKey, async () => {
+          await this.decommissionVmInternal(sessionKey, previous)
         })
       } catch (error) {
         console.warn(`[cloud] Failed decommissioning removed session ${sessionId}:`, error)
       }
-      this.sessions.delete(sessionId)
-      this.sessionProfiles.delete(sessionId)
+      this.sessions.delete(sessionKey)
     }
   }
 
   async ensureSessionVm(profileId: string, snapshot: CloudSessionSnapshot): Promise<VmInfo> {
-    this.sessions.set(snapshot.id, snapshot)
-    this.sessionProfiles.set(snapshot.id, profileId)
+    const sessionKey = this.getSessionKey(profileId, snapshot.id)
+    this.sessions.set(sessionKey, snapshot)
     let vmInfo: VmInfo | undefined
-    await this.runExclusive(snapshot.id, async () => {
-      this.clearIdleTimer(snapshot.id)
-      vmInfo = await this.ensureVmInternal(profileId, snapshot.id, snapshot)
+    await this.runExclusive(sessionKey, async () => {
+      this.clearIdleTimer(sessionKey)
+      vmInfo = await this.ensureVmInternal(sessionKey, profileId, snapshot.id, snapshot)
     })
     return vmInfo!
   }
 
-  async decommissionSessionVm(snapshot: CloudSessionSnapshot): Promise<void> {
-    this.sessions.set(snapshot.id, snapshot)
-    await this.runExclusive(snapshot.id, async () => {
-      await this.decommissionVmInternal(snapshot.id, snapshot)
+  async decommissionSessionVm(profileId: string, snapshot: CloudSessionSnapshot): Promise<void> {
+    const sessionKey = this.getSessionKey(profileId, snapshot.id)
+    this.sessions.set(sessionKey, snapshot)
+    await this.runExclusive(sessionKey, async () => {
+      await this.decommissionVmInternal(sessionKey, snapshot)
     })
-    this.sessionProfiles.delete(snapshot.id)
+    this.sessions.delete(sessionKey)
   }
 
   async shutdownAll(): Promise<void> {
-    for (const sessionId of this.idleTimers.keys()) {
-      this.clearIdleTimer(sessionId)
+    for (const sessionKey of this.idleTimers.keys()) {
+      this.clearIdleTimer(sessionKey)
     }
 
-    const ids = new Set<string>([
+    const keys = new Set<string>([
       ...this.sessions.keys(),
       ...this.vmsBySession.keys(),
-      ...this.sessionProfiles.keys(),
+      ...this.idleTimers.keys(),
     ])
 
-    await Promise.all(Array.from(ids).map(async (sessionId) => {
-      const snapshot = this.sessions.get(sessionId) ?? {
-        id: sessionId,
+    await Promise.all(Array.from(keys).map(async (sessionKey) => {
+      const snapshot = this.sessions.get(sessionKey) ?? {
+        id: this.getSessionIdFromKey(sessionKey),
         status: 'idle',
         isArchived: true,
       }
       try {
-        await this.runExclusive(sessionId, async () => {
-          await this.decommissionVmInternal(sessionId, snapshot)
+        await this.runExclusive(sessionKey, async () => {
+          await this.decommissionVmInternal(sessionKey, snapshot)
         })
       } catch (error) {
+        const sessionId = this.getSessionIdFromKey(sessionKey)
         console.warn(`[cloud] Failed to shutdown VM for session ${sessionId}:`, error)
       }
     }))
 
-    this.sessionProfiles.clear()
+    this.sessions.clear()
+    this.vmsBySession.clear()
+    this.idleTimers.clear()
+    this.inFlight.clear()
   }
 }
 

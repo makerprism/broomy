@@ -23,12 +23,12 @@ export function register(ipcMain: IpcMain, ctx: HandlerContext): void {
     }
   })
 
-  ipcMain.handle('cloud:decommissionSessionVm', async (_event, session: CloudSessionSnapshot) => {
+  ipcMain.handle('cloud:decommissionSessionVm', async (_event, profileId: string, session: CloudSessionSnapshot) => {
     if (ctx.isE2ETest) {
       return { success: true }
     }
     try {
-      await cloudVmManager.decommissionSessionVm(session)
+      await cloudVmManager.decommissionSessionVm(profileId, session)
       return { success: true }
     } catch (error) {
       return { success: false, error: error instanceof Error ? error.message : String(error) }

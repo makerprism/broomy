@@ -11,13 +11,13 @@ export type CloudSessionSnapshot = {
 export type CloudApi = {
   syncSessions: (profileId: string, sessions: CloudSessionSnapshot[]) => Promise<{ success: boolean }>
   ensureSessionVm: (profileId: string, session: CloudSessionSnapshot) => Promise<{ success: boolean; host?: string; vmId?: string; vmName?: string; error?: string }>
-  decommissionSessionVm: (session: CloudSessionSnapshot) => Promise<{ success: boolean; error?: string }>
+  decommissionSessionVm: (profileId: string, session: CloudSessionSnapshot) => Promise<{ success: boolean; error?: string }>
   shutdownAll: () => Promise<{ success: boolean }>
 }
 
 export const cloudApi: CloudApi = {
   syncSessions: (profileId, sessions) => ipcRenderer.invoke('cloud:syncSessions', profileId, sessions),
   ensureSessionVm: (profileId, session) => ipcRenderer.invoke('cloud:ensureSessionVm', profileId, session),
-  decommissionSessionVm: (session) => ipcRenderer.invoke('cloud:decommissionSessionVm', session),
+  decommissionSessionVm: (profileId, session) => ipcRenderer.invoke('cloud:decommissionSessionVm', profileId, session),
   shutdownAll: () => ipcRenderer.invoke('cloud:shutdownAll'),
 }

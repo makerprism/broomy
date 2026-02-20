@@ -1,6 +1,7 @@
 import { useCallback } from 'react'
 import { type Session, type LayoutSizes } from '../store/sessions'
 import { useErrorStore } from '../store/errors'
+import { useProfileStore } from '../store/profiles'
 import { PANEL_IDS } from '../panels'
 import type { AgentConfig } from '../store/agents'
 import type { PrState } from '../utils/branchStatus'
@@ -38,6 +39,7 @@ export function useAppCallbacks({
   onSessionAlreadyExists,
 }: AppCallbacksDeps) {
   const { addError } = useErrorStore()
+  const currentProfileId = useProfileStore((state) => state.currentProfileId)
 
   const handleNewSession = useCallback(() => {
     setShowNewSessionDialog(true)
@@ -119,11 +121,17 @@ export function useAppCallbacks({
     // Remove session immediately for responsive UI
     const session = sessions.find(s => s.id === id)
     if (session?.execution?.mode === 'remote-ssh') {
-      void window.cloud.decommissionSessionVm({
+      void window.cloud.decommissionSessionVm(currentProfileId, {
         id: session.id,
         status: session.status,
         isArchived: true,
         execution: session.execution,
+      }).then((result) => {
+        if (!result.success) {
+          addError(`Failed to decommission cloud VM: ${result.error ?? 'Unknown error'}`)
+        }
+      }).catch((error: unknown) => {
+        addError(`Failed to decommission cloud VM: ${error instanceof Error ? error.message : String(error)}`)
       })
     }
     removeSession(id)
@@ -153,7 +161,7 @@ export function useAppCallbacks({
         })()
       }
     }
-  }, [sessions, repos, removeSession, addError])
+  }, [currentProfileId, sessions, repos, removeSession, addError])
 
   const handleTogglePanel = useCallback((panelId: string) => {
     if (activeSessionId) {

@@ -42,6 +42,10 @@ vi.mock('./updater', () => ({
   register: vi.fn(),
 }))
 
+vi.mock('./cloud', () => ({
+  register: vi.fn(),
+}))
+
 import { registerAllHandlers } from './index'
 import * as ptyHandlers from './pty'
 import * as configHandlers from './config'
@@ -52,6 +56,7 @@ import * as shellHandlers from './shell'
 import * as appHandlers from './app'
 import * as typescriptHandlers from './typescript'
 import * as updaterHandlers from './updater'
+import * as cloudHandlers from './cloud'
 import type { HandlerContext } from './types'
 import type { IpcMain } from 'electron'
 
@@ -110,7 +115,7 @@ describe('registerAllHandlers', () => {
     expect(updaterHandlers.register).toHaveBeenCalledWith(mockIpcMain, mockCtx)
   })
 
-  it('calls all 9 handler register functions exactly once', () => {
+  it('calls all handler register functions exactly once', () => {
     registerAllHandlers(mockIpcMain as unknown as IpcMain, mockCtx)
     expect(ptyHandlers.register).toHaveBeenCalledTimes(1)
     expect(configHandlers.register).toHaveBeenCalledTimes(1)
@@ -121,5 +126,11 @@ describe('registerAllHandlers', () => {
     expect(appHandlers.register).toHaveBeenCalledTimes(1)
     expect(typescriptHandlers.register).toHaveBeenCalledTimes(1)
     expect(updaterHandlers.register).toHaveBeenCalledTimes(1)
+    expect(cloudHandlers.register).toHaveBeenCalledTimes(1)
+  })
+
+  it('delegates to cloudHandlers.register', () => {
+    registerAllHandlers(mockIpcMain as unknown as IpcMain, mockCtx)
+    expect(cloudHandlers.register).toHaveBeenCalledWith(mockIpcMain, mockCtx)
   })
 })

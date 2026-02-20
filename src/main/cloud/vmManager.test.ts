@@ -114,4 +114,30 @@ describe('CloudVmManager', () => {
       expect.objectContaining({ method: 'DELETE' }),
     )
   })
+
+  it('does not decommission sessions from other profiles during sync', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(mockResponse(204, null))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const manager = new CloudVmManager()
+
+    await manager.syncSessions('profile-a', [{
+      id: 'session-a',
+      status: 'idle',
+      isArchived: false,
+      execution: {
+        mode: 'remote-ssh',
+        provider: 'ubicloud',
+        location: 'eu-central-h1',
+        size: 'standard-2',
+        remoteDir: '~/workspace',
+        unixUser: 'ubuntu',
+        vmName: 'profile-a-vm',
+      },
+    }])
+
+    await manager.syncSessions('profile-b', [])
+
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
 })

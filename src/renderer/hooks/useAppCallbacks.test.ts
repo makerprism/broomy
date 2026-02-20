@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
 import { useAppCallbacks } from './useAppCallbacks'
 import { useErrorStore } from '../store/errors'
+import { useProfileStore } from '../store/profiles'
 import { allowConsoleError } from '../../test/console-guard'
 
 // Build a default deps object with fresh mocks for every test
@@ -29,6 +30,7 @@ describe('useAppCallbacks', () => {
   beforeEach(() => {
     allowConsoleError()
     useErrorStore.setState({ errors: [], hasUnread: false, detailError: null })
+    useProfileStore.setState({ currentProfileId: 'default' })
     vi.clearAllMocks()
   })
 
@@ -327,5 +329,83 @@ describe('useAppCallbacks', () => {
     act(() => result.current.handleDeleteSession('s1', true))
     expect(deps.removeSession).toHaveBeenCalledWith('s1')
     expect(window.git.worktreeRemove).not.toHaveBeenCalled()
+  })
+
+  it('handleDeleteSession decommissions remote VM with current profile id', async () => {
+    useProfileStore.setState({ currentProfileId: 'work-profile' })
+    const sessions = [{
+      id: 's1',
+      directory: '/remote/work',
+      status: 'idle',
+      execution: {
+        mode: 'remote-ssh',
+        provider: 'ubicloud',
+        location: 'eu-central-h1',
+        size: 'standard-2',
+        remoteDir: '~/workspace',
+        unixUser: 'ubuntu',
+      },
+    }] as Parameters<typeof useAppCallbacks>[0]['sessions']
+    const deps = makeDeps({ sessions })
+    const { result } = renderHook(() => useAppCallbacks(deps))
+
+    act(() => result.current.handleDeleteSession('s1', false))
+
+    await vi.waitFor(() => {
+      expect(window.cloud.decommissionSessionVm).toHaveBeenCalledWith(
+        'work-profile',
+        expect.objectContaining({ id: 's1', isArchived: true }),
+      )
+    })
+  })
+
+  it('handleDeleteSession surfaces cloud decommission failure responses', async () => {
+    const sessions = [{
+      id: 's1',
+      directory: '/remote/work',
+      status: 'idle',
+      execution: {
+        mode: 'remote-ssh',
+        provider: 'ubicloud',
+        location: 'eu-central-h1',
+        size: 'standard-2',
+        remoteDir: '~/workspace',
+        unixUser: 'ubuntu',
+      },
+    }] as Parameters<typeof useAppCallbacks>[0]['sessions']
+    vi.mocked(window.cloud.decommissionSessionVm).mockResolvedValue({ success: false, error: 'permission denied' })
+    const deps = makeDeps({ sessions })
+    const { result } = renderHook(() => useAppCallbacks(deps))
+
+    act(() => result.current.handleDeleteSession('s1', false))
+
+    await vi.waitFor(() => {
+      expect(useErrorStore.getState().errors.some(e => e.message.includes('permission denied'))).toBe(true)
+    })
+  })
+
+  it('handleDeleteSession surfaces cloud decommission thrown errors', async () => {
+    const sessions = [{
+      id: 's1',
+      directory: '/remote/work',
+      status: 'idle',
+      execution: {
+        mode: 'remote-ssh',
+        provider: 'ubicloud',
+        location: 'eu-central-h1',
+        size: 'standard-2',
+        remoteDir: '~/workspace',
+        unixUser: 'ubuntu',
+      },
+    }] as Parameters<typeof useAppCallbacks>[0]['sessions']
+    vi.mocked(window.cloud.decommissionSessionVm).mockRejectedValue(new Error('network down'))
+    const deps = makeDeps({ sessions })
+    const { result } = renderHook(() => useAppCallbacks(deps))
+
+    act(() => result.current.handleDeleteSession('s1', false))
+
+    await vi.waitFor(() => {
+      expect(useErrorStore.getState().errors.some(e => e.message.includes('network down'))).toBe(true)
+    })
   })
 })
