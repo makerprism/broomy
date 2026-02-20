@@ -27,7 +27,7 @@ export function CloudSessionView({
   const { agents } = useAgentStore()
   const [name, setName] = useState('')
   const [location, setLocation] = useState('eu-central-h1')
-  const [size, setSize] = useState('standard-2')
+  const [size, setSize] = useState('burstable-2')
   const [unixUser, setUnixUser] = useState('ubuntu')
   const [remoteDir, setRemoteDir] = useState('~/workspace')
   const [vmName, setVmName] = useState('')
@@ -98,7 +98,7 @@ export function CloudSessionView({
           </label>
           <label className="block space-y-1">
             <span className="text-xs text-text-secondary">VM Size</span>
-            <input value={size} onChange={(e) => setSize(e.target.value)} className="w-full px-3 py-2 text-sm rounded bg-bg-primary border border-border text-text-primary" placeholder="standard-2" />
+            <input value={size} onChange={(e) => setSize(e.target.value)} className="w-full px-3 py-2 text-sm rounded bg-bg-primary border border-border text-text-primary" placeholder="burstable-2" />
           </label>
         </div>
 
