@@ -47,6 +47,7 @@ export function useSessionLifecycle({
   const [directoryExists, setDirectoryExists] = useState<Record<string, boolean>>({})
   const setConversationSnapshot = useSessionStore((state) => state.setConversationSnapshot)
   const lastSavedTranscriptBufferRef = useRef<Record<string, string>>({})
+  const lastSeedFingerprintRef = useRef<string>('')
 
   const captureConversationSnapshots = useCallback(() => {
     let hasChanges = false
@@ -90,6 +91,12 @@ export function useSessionLifecycle({
   useEffect(() => {
     let cancelled = false
 
+    const seedFingerprint = `${currentProfileId}:${sessions
+      .map((session) => `${session.id}:${session.conversationSnapshot?.capturedAt ?? 0}`)
+      .join('|')}`
+    if (lastSeedFingerprintRef.current === seedFingerprint) return
+    lastSeedFingerprintRef.current = seedFingerprint
+
     const seedTranscriptsFromSnapshots = async () => {
       if (sessions.length === 0) return
 
@@ -117,7 +124,7 @@ export function useSessionLifecycle({
     return () => {
       cancelled = true
     }
-  }, [sessions])
+  }, [sessions, currentProfileId])
 
   // Check if session directories exist
   useEffect(() => {
