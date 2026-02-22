@@ -454,7 +454,7 @@ describe('useSessionLifecycle', () => {
 
     it('adds worktree transcript pattern to local git exclude', async () => {
       vi.mocked(terminalBufferRegistry.getBuffer).mockReturnValue('agent output line')
-      vi.mocked(window.shell.exec).mockResolvedValue({ success: true, stdout: '/test/dir/.git/info/exclude\n', stderr: '', exitCode: 0 } as never)
+      vi.mocked(window.shell.exec).mockResolvedValue({ success: true, stdout: '/test/dir/.git\n', stderr: '', exitCode: 0 } as never)
       vi.mocked(window.fs.exists).mockResolvedValue(true as never)
       vi.mocked(window.fs.readFile).mockResolvedValue('# existing\n' as never)
 
@@ -466,7 +466,7 @@ describe('useSessionLifecycle', () => {
         await Promise.resolve()
       })
 
-      expect(window.shell.exec).toHaveBeenCalledWith('git rev-parse --git-path info/exclude', '/test/dir')
+      expect(window.shell.exec).toHaveBeenCalledWith('git rev-parse --absolute-git-dir', '/test/dir')
       expect(window.fs.appendFile).toHaveBeenCalledWith(
         '/test/dir/.git/info/exclude',
         expect.stringContaining('.broomy-session-*.txt')

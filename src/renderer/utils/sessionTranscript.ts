@@ -25,11 +25,12 @@ export function getWorktreeSessionTranscriptPath(session: SessionTranscriptSourc
 }
 
 async function ensureWorktreeTranscriptIgnored(session: SessionTranscriptSource): Promise<void> {
-  const gitPath = await window.shell.exec('git rev-parse --git-path info/exclude', session.directory)
-  if (!gitPath.success) return
+  const gitDir = await window.shell.exec('git rev-parse --absolute-git-dir', session.directory)
+  if (!gitDir.success) return
 
-  const excludePath = gitPath.stdout.trim()
-  if (!excludePath) return
+  const resolvedGitDir = gitDir.stdout.trim()
+  if (!resolvedGitDir) return
+  const excludePath = `${resolvedGitDir}/info/exclude`
 
   const exists = await window.fs.exists(excludePath)
   if (!exists) {

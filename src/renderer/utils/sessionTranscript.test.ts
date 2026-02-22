@@ -27,7 +27,7 @@ describe('sessionTranscript utils', () => {
 
   it('persists transcript and appends local exclude marker', async () => {
     vi.mocked(window.fs.writeFile).mockResolvedValue({ success: true } as never)
-    vi.mocked(window.shell.exec).mockResolvedValue({ success: true, stdout: '/tmp/repo/.git/info/exclude\n', stderr: '', exitCode: 0 } as never)
+    vi.mocked(window.shell.exec).mockResolvedValue({ success: true, stdout: '/tmp/repo/.git\n', stderr: '', exitCode: 0 } as never)
     vi.mocked(window.fs.exists).mockResolvedValue(true as never)
     vi.mocked(window.fs.readFile).mockResolvedValue('# existing\n' as never)
 
