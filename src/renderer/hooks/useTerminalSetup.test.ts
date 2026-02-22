@@ -294,16 +294,9 @@ describe('useTerminalSetup', () => {
       expect.stringContaining('[This does not reconnect the underlying OpenCode process.]'),
     )
     expect(mockTerminalWrite).toHaveBeenCalledWith(expect.stringContaining('line one\r\nline two'))
-    expect(mockTerminalWrite).toHaveBeenCalledWith(
-      expect.stringContaining('[Injected restore context into the running agent session.]'),
-    )
-    expect(window.pty.write).toHaveBeenCalledWith(
+    expect(window.pty.write).not.toHaveBeenCalledWith(
       expect.any(String),
       expect.stringContaining('[Auto-restored context] Previous session context:'),
-    )
-    expect(window.pty.write).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.stringMatching(/\r$/),
     )
   })
 
@@ -399,7 +392,7 @@ describe('useTerminalSetup', () => {
     expect(terminalBufferRegistry.register).not.toHaveBeenCalled()
   })
 
-  it('does not prefill recap draft for non-agent terminals', async () => {
+  it('does not inject restore context for non-agent terminals', async () => {
     useSessionStore.setState({
       sessions: [
         {
@@ -450,6 +443,7 @@ describe('useTerminalSetup', () => {
 
     await act(async () => { await new Promise(r => setTimeout(r, 300)) })
 
+    expect(window.pty.write).not.toHaveBeenCalled()
     expect(window.pty.write).not.toHaveBeenCalledWith(
       expect.any(String),
       expect.stringContaining('[Auto-restored context] Previous session context:'),

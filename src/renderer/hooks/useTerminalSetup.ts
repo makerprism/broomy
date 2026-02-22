@@ -51,33 +51,12 @@ const XTERM_THEME = {
   brightWhite: '#ffffff',
 } as const
 
-const RECAP_TAIL_LINES = 5
-const RECAP_MAX_CHARS = 280
 const RESTORE_AFTER_OUTPUT_DELAY_MS = 120
 const RESTORE_FALLBACK_DELAY_MS = 200
 const OPENCODE_RESTORE_FALLBACK_DELAY_MS = 4000
 const OPENCODE_STARTUP_SIGNAL = /\b(opencode|open\s*code)\b/i
 
 function isOpenCodeCommand(command: string | undefined): boolean { return !!command && /\bopencode\b/i.test(command) }
-
-function buildRestoreRecapPrompt(snapshotContent: string | null | undefined): string | null {
-  if (!snapshotContent) return null
-
-  const cleanedTail = snapshotContent
-    .split('\n')
-    .map((line) => line.replace(/\s+/g, ' ').trim())
-    .filter(Boolean)
-    .slice(-RECAP_TAIL_LINES)
-
-  if (cleanedTail.length === 0) return null
-
-  let recap = cleanedTail.join(' | ')
-  if (recap.length > RECAP_MAX_CHARS) {
-    recap = `...${recap.slice(-(RECAP_MAX_CHARS - 3))}`
-  }
-
-  return `[Auto-restored context] Previous session context: ${recap}`
-}
 
 // ── Viewport helpers factory ─────────────────────────────────────────
 
@@ -421,7 +400,6 @@ export function useTerminalSetup(
       ? useSessionStore.getState().sessions.find((item) => item.id === sessionId)
       : undefined
     const restoredConversation = session?.conversationSnapshot?.content
-    const recapPrompt = buildRestoreRecapPrompt(restoredConversation)
 
     if (isAgent && sessionId) {
       terminalBufferRegistry.register(sessionId, () => {
@@ -456,7 +434,6 @@ export function useTerminalSetup(
     const id = `${sessionId}-${Date.now()}`
     s.ptyIdRef.current = id
     let restoreTimeout: ReturnType<typeof setTimeout> | null = null, restoreAfterOutputTimeout: ReturnType<typeof setTimeout> | null = null
-    let recapPrefillTimeout: ReturnType<typeof setTimeout> | null = null
 
     window.pty.create({ id, cwd: effectCwd, command: cmd, sessionId, env: envVars })
       .then(() => {
@@ -479,12 +456,6 @@ export function useTerminalSetup(
         })
 
         let hasRestoredConversation = false
-        let hasInjectedRecapPrompt = false
-        const injectRecapPrompt = () => {
-          if (hasInjectedRecapPrompt || !recapPrompt) return
-          hasInjectedRecapPrompt = true
-          void window.pty.write(id, `${recapPrompt}\r`)
-        }
 
         const restoreConversation = () => {
           if (hasRestoredConversation || !restoredConversation) return
@@ -499,11 +470,6 @@ export function useTerminalSetup(
             terminal.write(`${snapshotBanner}${restoredConversation.replace(/\n/g, '\r\n')}`)
           } catch {
             // Continue even if restore write fails.
-          }
-
-          if (isAgent && recapPrompt) {
-            terminal.write('\r\n[Injected restore context into the running agent session.]\r\n')
-            recapPrefillTimeout = setTimeout(injectRecapPrompt, 220)
           }
         }
 
@@ -581,7 +547,6 @@ export function useTerminalSetup(
       s.cleanupRef.current?.()
       if (restoreTimeout) clearTimeout(restoreTimeout)
       if (restoreAfterOutputTimeout) clearTimeout(restoreAfterOutputTimeout)
-      if (recapPrefillTimeout) clearTimeout(recapPrefillTimeout)
       if (s.ptyIdRef.current) { void window.pty.kill(s.ptyIdRef.current); s.ptyIdRef.current = null }
       terminal.dispose()
       if (s.updateTimeoutRef.current) clearTimeout(s.updateTimeoutRef.current)

@@ -8,6 +8,31 @@ export type SnapshotLimits = {
   maxBytes: number
 }
 
+const TRANSIENT_RESTORE_LINES = [
+  /^\[Restored terminal snapshot from previous app session\.\]$/,
+  /^\[This does not reconnect the underlying OpenCode process\.\]$/,
+  /^\[Injected restore context into the running agent session\.\]$/,
+  /^\[Auto-restored context\] Previous session context:/,
+]
+
+function isTransientRestoreLine(line: string): boolean {
+  return TRANSIENT_RESTORE_LINES.some((pattern) => pattern.test(line))
+}
+
+function sanitizeSnapshotContent(content: string): string {
+  const normalized = content.replace(/\r\n?/g, '\n')
+  const cleanedLines = normalized
+    .split('\n')
+    .map((line) => line.trimEnd())
+    .filter((line) => !isTransientRestoreLine(line.trim()))
+
+  while (cleanedLines.length > 0 && cleanedLines[cleanedLines.length - 1] === '') {
+    cleanedLines.pop()
+  }
+
+  return cleanedLines.join('\n')
+}
+
 function trimToUtf8Boundary(bytes: Uint8Array, startIndex: number): Uint8Array {
   let start = startIndex
   while (start < bytes.length && (bytes[start] & 0b11000000) === 0b10000000) {
@@ -23,7 +48,7 @@ export function buildConversationSnapshot(
   if (!content) return null
 
   let truncated = false
-  let normalized = content
+  let normalized = sanitizeSnapshotContent(content)
 
   const lines = normalized.split('\n')
   if (lines.length > limits.maxLines) {

@@ -33,4 +33,19 @@ describe('buildConversationSnapshot', () => {
     expect(snapshot?.content.includes('😀')).toBe(true)
     expect(snapshot?.truncated).toBe(true)
   })
+
+  it('filters transient restore/injection lines from snapshots', () => {
+    const snapshot = buildConversationSnapshot(
+      [
+        '[Restored terminal snapshot from previous app session.]',
+        '[This does not reconnect the underlying OpenCode process.]',
+        '[Auto-restored context] Previous session context: stale summary',
+        'user> continue with migration',
+        'assistant> applied fix',
+      ].join('\n'),
+      { maxLines: 20, maxBytes: 1000 },
+    )
+
+    expect(snapshot?.content).toBe('user> continue with migration\nassistant> applied fix')
+  })
 })
