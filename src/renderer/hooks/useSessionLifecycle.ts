@@ -4,6 +4,8 @@ import type { ProfileData } from '../store/profiles'
 import { terminalBufferRegistry } from '../utils/terminalBufferRegistry'
 import { loadMonacoProjectContext } from '../utils/monacoProjectContext'
 
+const CLOUD_SYNC_DEBOUNCE_MS = 250
+
 export function useSessionLifecycle({
   sessions,
   activeSession,
@@ -118,6 +120,7 @@ export function useSessionLifecycle({
 
   // Keep cloud VM lifecycle in sync with runtime session state
   useEffect(() => {
+    const timeout = window.setTimeout(() => {
     const snapshots = sessions.map((session) => ({
       id: session.id,
       status: session.status,
@@ -127,6 +130,11 @@ export function useSessionLifecycle({
     void window.cloud.syncSessions(currentProfileId, snapshots).catch(() => {
       // Cloud sync errors are surfaced when sessions are explicitly created/started.
     })
+    }, CLOUD_SYNC_DEBOUNCE_MS)
+
+    return () => {
+      window.clearTimeout(timeout)
+    }
   }, [currentProfileId, sessions])
 
   // Keyboard shortcut to copy terminal content + summary (Cmd+Shift+C)

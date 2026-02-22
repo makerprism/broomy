@@ -390,4 +390,42 @@ describe('useSessionLifecycle', () => {
       expect(loadMonacoProjectContext).not.toHaveBeenCalled()
     })
   })
+
+  describe('cloud sync debounce', () => {
+    it('debounces cloud sync and sends only latest snapshots', () => {
+      const initial = makeHookParams()
+      const { rerender } = renderHook(
+        ({ params }) => useSessionLifecycle(params),
+        { initialProps: { params: initial } },
+      )
+
+      expect(window.cloud.syncSessions).not.toHaveBeenCalled()
+
+      const updated = makeHookParams({
+        sessions: [makeSession({ id: 'session-2', status: 'working' })],
+        activeSession: makeSession({ id: 'session-2', status: 'working' }),
+        activeSessionId: 'session-2',
+      })
+      rerender({ params: updated })
+
+      act(() => { vi.advanceTimersByTime(249) })
+      expect(window.cloud.syncSessions).not.toHaveBeenCalled()
+
+      act(() => { vi.advanceTimersByTime(1) })
+      expect(window.cloud.syncSessions).toHaveBeenCalledTimes(1)
+      expect(window.cloud.syncSessions).toHaveBeenCalledWith('default', [
+        expect.objectContaining({ id: 'session-2', status: 'working', isArchived: false }),
+      ])
+    })
+
+    it('cancels pending cloud sync on unmount', () => {
+      const params = makeHookParams()
+      const { unmount } = renderLifecycleHook(params)
+
+      unmount()
+      act(() => { vi.advanceTimersByTime(300) })
+
+      expect(window.cloud.syncSessions).not.toHaveBeenCalled()
+    })
+  })
 })

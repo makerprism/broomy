@@ -207,4 +207,78 @@ describe('CloudVmManager', () => {
     expect(fetchMock.mock.calls[0]?.[1]).toEqual(expect.objectContaining({ method: 'DELETE' }))
     expect(fetchMock.mock.calls[1]?.[1]).not.toEqual(expect.objectContaining({ method: 'DELETE' }))
   })
+
+  it('coalesces queued syncs and applies only latest pending snapshot', async () => {
+    let releaseDelete: (() => void) | undefined
+    const deleteGate = new Promise<void>((resolve) => {
+      releaseDelete = resolve
+    })
+
+    const fetchMock = vi.fn().mockImplementationOnce(async () => {
+      await deleteGate
+      return mockResponse(204, null)
+    })
+
+    vi.stubGlobal('fetch', fetchMock)
+
+    const manager = new CloudVmManager()
+
+    const staleSync = manager.syncSessions('profile-coalesce', [{
+      id: 'session-coalesce',
+      status: 'error',
+      isArchived: true,
+      execution: {
+        mode: 'remote-ssh',
+        provider: 'ubicloud',
+        location: 'eu-central-h1',
+        size: 'standard-2',
+        remoteDir: '~/workspace',
+        unixUser: 'ubuntu',
+        vmName: 'coalesce-vm',
+      },
+    }])
+
+    const midSync = manager.syncSessions('profile-coalesce', [{
+      id: 'session-coalesce',
+      status: 'working',
+      isArchived: false,
+      execution: {
+        mode: 'remote-ssh',
+        provider: 'ubicloud',
+        location: 'eu-central-h1',
+        size: 'standard-2',
+        remoteDir: '~/workspace',
+        unixUser: 'ubuntu',
+        vmName: 'coalesce-vm',
+      },
+    }])
+
+    const latestSync = manager.syncSessions('profile-coalesce', [{
+      id: 'session-coalesce',
+      status: 'idle',
+      isArchived: false,
+      execution: {
+        mode: 'remote-ssh',
+        provider: 'ubicloud',
+        location: 'eu-central-h1',
+        size: 'standard-2',
+        remoteDir: '~/workspace',
+        unixUser: 'ubuntu',
+        vmName: 'coalesce-vm',
+      },
+    }])
+
+    await vi.waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+    })
+
+    releaseDelete?.()
+    await staleSync
+    await midSync
+    await latestSync
+
+    // Only the stale decommission call runs; middle snapshot is superseded
+    // by the latest queued idle snapshot (which only schedules an idle timer).
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
 })
