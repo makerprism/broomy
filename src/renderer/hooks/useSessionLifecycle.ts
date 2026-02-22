@@ -196,7 +196,7 @@ export function useSessionLifecycle({
     return () => clearInterval(interval)
   }, [sessions.length, refreshAllBranches])
 
-  // Periodically checkpoint conversation snapshots for restore on restart.
+  // Periodically checkpoint conversation snapshots for continuity after restart.
   useEffect(() => {
     const interval = setInterval(() => {
       captureConversationSnapshots()

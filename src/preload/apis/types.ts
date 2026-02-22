@@ -146,7 +146,7 @@ export type SessionData = {
   hasHadCommits?: boolean
   // Archive state
   isArchived?: boolean
-  // Conversation restore snapshot
+  // Persisted conversation snapshot
   conversationSnapshot?: {
     format: 'plain-text-v1'
     content: string

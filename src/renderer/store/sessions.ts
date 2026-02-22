@@ -94,7 +94,7 @@ export interface Session {
   agentPtyId?: string
   // Recently opened files (runtime, most recent first)
   recentFiles: string[]
-  // Last persisted conversation snapshot for restore
+  // Last persisted conversation snapshot
   conversationSnapshot?: ConversationSnapshot
   // Whether snapshot changed since last save (runtime only)
   conversationSnapshotDirty?: boolean

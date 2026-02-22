@@ -35,8 +35,11 @@ const isHeadless = process.env.E2E_HEADLESS !== 'false'
 // Check if we're in screenshot mode (richer mock data for marketing screenshots)
 const isScreenshotMode = process.env.SCREENSHOT_MODE === 'true'
 
-// Enable seeded conversation snapshot in E2E demo data when requested
-const e2eConversationRestoreSnapshot = process.env.E2E_CONVERSATION_RESTORE_SNAPSHOT === 'true'
+// Enable seeded conversation snapshot in E2E demo data when requested.
+// Keep backward compatibility with the old env var name.
+const e2eConversationSnapshotSeed =
+  process.env.E2E_CONVERSATION_SNAPSHOT_SEED === 'true' ||
+  process.env.E2E_CONVERSATION_RESTORE_SNAPSHOT === 'true'
 
 // PTY instances map
 const ptyProcesses = new Map<string, pty.IPty>()
@@ -151,7 +154,7 @@ function createWindow(profileId?: string): BrowserWindow {
 const context: HandlerContext & { createWindow: (profileId?: string) => BrowserWindow } = {
   isE2ETest,
   isScreenshotMode,
-  e2eConversationRestoreSnapshot,
+    e2eConversationSnapshotSeed,
   isDev,
   isWindows,
   ptyProcesses,

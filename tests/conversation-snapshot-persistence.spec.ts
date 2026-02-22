@@ -5,7 +5,7 @@ import { fileURLToPath } from 'url'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
-const RESTORE_MARKER = 'E2E_RESTORE_MARKER: conversation should stay visible'
+const SNAPSHOT_SEED_MARKER = 'E2E_SNAPSHOT_SEED_MARKER: snapshot seed is available'
 
 let electronApp: ElectronApplication
 let page: Page
@@ -24,7 +24,7 @@ test.beforeAll(async () => {
       ...process.env,
       NODE_ENV: 'production',
       E2E_TEST: 'true',
-      E2E_CONVERSATION_RESTORE_SNAPSHOT: 'true',
+      E2E_CONVERSATION_SNAPSHOT_SEED: 'true',
       E2E_HEADLESS: process.env.E2E_HEADLESS ?? 'true',
     },
   })
@@ -38,17 +38,12 @@ test.afterAll(async () => {
   if (electronApp) await electronApp.close()
 })
 
-test('restored conversation remains visible after Claude startup output', async () => {
+test('seeded snapshot is not replayed into terminal output', async () => {
   const broomySession = page.locator('.cursor-pointer:has-text("broomy")')
   await broomySession.click()
 
-  await expect.poll(async () => {
-    const text = await getTerminalText(page)
-    return text.includes(RESTORE_MARKER)
-  }, { timeout: 8000 }).toBe(true)
+  await page.waitForTimeout(2000)
 
-  await page.waitForTimeout(1500)
-
-  const textAfterStartup = await getTerminalText(page)
-  expect(textAfterStartup).toContain(RESTORE_MARKER)
+  const terminalText = await getTerminalText(page)
+  expect(terminalText).not.toContain(SNAPSHOT_SEED_MARKER)
 })

@@ -51,13 +51,6 @@ const XTERM_THEME = {
   brightWhite: '#ffffff',
 } as const
 
-const RESTORE_AFTER_OUTPUT_DELAY_MS = 120
-const RESTORE_FALLBACK_DELAY_MS = 200
-const OPENCODE_RESTORE_FALLBACK_DELAY_MS = 4000
-const OPENCODE_STARTUP_SIGNAL = /\b(opencode|open\s*code)\b/i
-
-function isOpenCodeCommand(command: string | undefined): boolean { return !!command && /\bopencode\b/i.test(command) }
-
 // ── Viewport helpers factory ─────────────────────────────────────────
 
 interface ViewportHelpers {
@@ -377,8 +370,6 @@ export function useTerminalSetup(
     const envVars = s.envRef.current
     const effectCwd = s.cwdRef.current
     const effectStartTime = Date.now()
-    const isOpenCodeAgentCommand = isAgent && isOpenCodeCommand(cmd)
-
     const terminal = new XTerm({
       theme: XTERM_THEME,
       fontFamily: 'Menlo, Monaco, "Courier New", monospace',
@@ -395,11 +386,6 @@ export function useTerminalSetup(
     terminal.loadAddon(fitAddon)
 
     terminal.open(containerRef.current)
-
-    const session = isAgent && sessionId
-      ? useSessionStore.getState().sessions.find((item) => item.id === sessionId)
-      : undefined
-    const restoredConversation = session?.conversationSnapshot?.content
 
     if (isAgent && sessionId) {
       terminalBufferRegistry.register(sessionId, () => {
@@ -433,8 +419,6 @@ export function useTerminalSetup(
 
     const id = `${sessionId}-${Date.now()}`
     s.ptyIdRef.current = id
-    let restoreTimeout: ReturnType<typeof setTimeout> | null = null, restoreAfterOutputTimeout: ReturnType<typeof setTimeout> | null = null
-
     window.pty.create({ id, cwd: effectCwd, command: cmd, sessionId, env: envVars })
       .then(() => {
         if (isAgentTerminal && sessionId) s.setAgentPtyId(sessionId, id)
@@ -455,39 +439,8 @@ export function useTerminalSetup(
           effectStartTime,
         })
 
-        let hasRestoredConversation = false
-
-        const restoreConversation = () => {
-          if (hasRestoredConversation || !restoredConversation) return
-          hasRestoredConversation = true
-          const snapshotBanner = [
-            '',
-            '[Restored terminal snapshot from previous app session.]',
-            '[This does not reconnect the underlying OpenCode process.]',
-            '',
-          ].join('\r\n')
-          try {
-            terminal.write(`${snapshotBanner}${restoredConversation.replace(/\n/g, '\r\n')}`)
-          } catch {
-            // Continue even if restore write fails.
-          }
-        }
-
-        const scheduleConversationRestoreAfterOutput = () => {
-          if (!restoredConversation || hasRestoredConversation || !hasSeenAgentStartupSignal) return
-          if (restoreAfterOutputTimeout) clearTimeout(restoreAfterOutputTimeout)
-          restoreAfterOutputTimeout = setTimeout(restoreConversation, RESTORE_AFTER_OUTPUT_DELAY_MS)
-        }
-
-        let hasSeenAgentStartupSignal = !isOpenCodeAgentCommand
-        const maybeMarkStartupSignalSeen = (data: string) => {
-          if (!hasSeenAgentStartupSignal && isOpenCodeAgentCommand && OPENCODE_STARTUP_SIGNAL.test(data)) hasSeenAgentStartupSignal = true
-        }
-
         const removeDataListener = window.pty.onData(id, (data) => {
           dataHandler.handleData(data)
-          maybeMarkStartupSignalSeen(data)
-          scheduleConversationRestoreAfterOutput()
         })
 
         const removeExitListener = window.pty.onExit(id, (exitCode: number) => {
@@ -497,12 +450,6 @@ export function useTerminalSetup(
             s.scheduleUpdate({ status: 'idle' })
           }
         })
-
-        if (restoredConversation) {
-          // Fallback when startup emits no data (or very delayed data).
-          const fallbackDelay = isOpenCodeAgentCommand ? OPENCODE_RESTORE_FALLBACK_DELAY_MS : RESTORE_FALLBACK_DELAY_MS
-          restoreTimeout = setTimeout(restoreConversation, fallbackDelay)
-        }
 
         s.cleanupRef.current = () => { dataHandler.clearTimers(); removeDataListener(); removeExitListener() }
       })
@@ -545,8 +492,6 @@ export function useTerminalSetup(
       if (ptyResizeTimeout) clearTimeout(ptyResizeTimeout)
       if (scrollTracking.state.pendingScrollRAF) cancelAnimationFrame(scrollTracking.state.pendingScrollRAF)
       s.cleanupRef.current?.()
-      if (restoreTimeout) clearTimeout(restoreTimeout)
-      if (restoreAfterOutputTimeout) clearTimeout(restoreAfterOutputTimeout)
       if (s.ptyIdRef.current) { void window.pty.kill(s.ptyIdRef.current); s.ptyIdRef.current = null }
       terminal.dispose()
       if (s.updateTimeoutRef.current) clearTimeout(s.updateTimeoutRef.current)

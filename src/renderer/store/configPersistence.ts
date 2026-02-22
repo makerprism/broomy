@@ -123,7 +123,7 @@ async function doSave(): Promise<void> {
       lastKnownPrUrl: s.lastKnownPrUrl,
       // Archive state
       isArchived: s.isArchived || undefined,
-      // Conversation restore snapshot
+      // Persisted conversation snapshot
       conversationSnapshot: s.conversationSnapshot,
     })),
     repos,

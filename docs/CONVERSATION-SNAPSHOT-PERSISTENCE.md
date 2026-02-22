@@ -1,6 +1,6 @@
-# Conversation Restore Feature
+# Conversation Snapshot Persistence
 
-This document defines a feature proposal for restoring agent conversation context when Broomy is restarted.
+This document describes how Broomy persists agent conversation snapshots so users can continue from saved session context after restart.
 
 ## Problem Statement
 
@@ -14,8 +14,8 @@ This creates friction for long-running tasks:
 
 ## Goals
 
-- Persist enough terminal conversation state to restore session context after restart.
-- Restore history automatically when the session terminal opens.
+- Persist enough terminal conversation state to recover session context after restart.
+- Keep startup output clean by avoiding terminal snapshot replay spam.
 - Keep implementation profile-aware and compatible with existing config files.
 - Keep config growth controlled with hard limits and truncation.
 
@@ -31,17 +31,17 @@ This creates friction for long-running tasks:
 - Session config persists structural UI/session fields, but not terminal transcript.
 - Agent status/unread/message fields are runtime-only and reset on launch.
 
-## Proposed Behavior
+## Behavior
 
 During runtime, Broomy periodically captures a bounded snapshot of each active agent terminal buffer and saves it in session config. On shutdown, Broomy performs a best-effort final flush.
 
-On startup, Broomy restores that snapshot into the agent terminal before new PTY output arrives.
+On startup, Broomy does **not** replay snapshot text into xterm. This avoids noisy banners and stale-output dumps in fresh terminals.
 
-Result: users re-open Broomy and see the previous conversation history in each session, then continue working in the same session.
+Result: users re-open Broomy, keep a saved session snapshot/transcript context, and continue from there without terminal spam.
 
 ## Scope Choice
 
-Phase 1 should implement transcript restore only.
+Phase 1 should implement snapshot persistence and transcript continuity.
 
 - Fastest path to user value.
 - Works with any agent CLI.
@@ -116,25 +116,24 @@ This keeps behavior robust without increasing write frequency during normal use.
 
 Important: terminal output does not currently trigger config saves. The checkpoint timer is required to prevent stale snapshots when users only interact via terminal output.
 
-## Restore Flow
+## Startup Flow
 
 When creating an agent terminal:
 
 1. Create xterm instance.
-2. If `conversationSnapshot` exists for the session, write snapshot content into xterm.
-3. Register buffer getter and start PTY connection.
-4. New output appends to restored content.
+2. Register buffer getter and start PTY connection.
+3. Use persisted `conversationSnapshot` for session/transcript continuity features.
 
-If snapshot restore fails, continue normally (non-fatal).
+No snapshot text is injected into the terminal UI.
 
-Ordering guarantee: snapshot write must happen before PTY data listeners are attached so restored content appears before fresh agent output.
+If snapshot payload is missing or invalid, continue normally (non-fatal).
 
 ## Backward Compatibility
 
 - Existing configs without `conversationSnapshot` continue to load unchanged.
 - New field is optional and ignored by older builds.
 - No migration step is required; behavior is additive.
-- If snapshot payload is malformed, oversized, or has unknown `format`, ignore it and continue without restore.
+- If snapshot payload is malformed, oversized, or has unknown `format`, ignore it and continue without replay.
 
 ## Performance and Storage Considerations
 
@@ -160,13 +159,13 @@ Unit tests:
 
 Renderer behavior tests:
 
-- Agent terminal writes restored snapshot before live PTY output.
-- Restore failure does not crash terminal setup.
+- Agent terminal does not replay persisted snapshot text.
+- Missing/invalid snapshot data does not crash terminal setup.
 - Snapshot checkpoint only saves when dirty.
 
 Integration/E2E checks:
 
-- Start session, generate output, close app, relaunch, verify transcript appears.
+- Start session, generate output, close app, relaunch, verify session snapshot/transcript continuity (without terminal replay).
 - Multi-profile isolation: snapshots remain scoped to the active profile config.
 - Corrupted snapshot payload in config is ignored without breaking session load.
 
@@ -175,9 +174,9 @@ Integration/E2E checks:
 1. Add data model fields and persistence wiring.
 2. Add capture + truncation helpers and dirty tracking.
 3. Add periodic dirty checkpoint saves.
-4. Add restore logic in terminal setup with pre-PTY ordering.
+4. Keep terminal startup free of snapshot replay.
 5. Add best-effort shutdown flush path.
-6. Add tests for truncation, ordering, malformed payloads, and checkpoint behavior.
+6. Add tests for truncation, malformed payloads, terminal no-replay behavior, and checkpoint behavior.
 7. Update docs and release notes.
 
 ## Implementation Checklist
@@ -233,18 +232,18 @@ Acceptance criteria:
 - Snapshot updates without requiring other UI mutations.
 - Save frequency stays bounded by checkpoint interval.
 
-### 5) Restore on Terminal Setup
+### 5) Terminal Startup Behavior
 
-- [ ] In `src/renderer/hooks/useTerminalSetup.ts`, restore snapshot before attaching PTY data listeners.
-- [ ] Keep failures non-fatal and continue terminal startup.
+- [ ] In `src/renderer/hooks/useTerminalSetup.ts`, do not replay persisted snapshot into xterm.
+- [ ] Keep missing/invalid snapshot handling non-fatal.
 
 Acceptance criteria:
 
-- On app restart, prior transcript is visible before new output.
+- On app restart, terminal opens cleanly without restored snapshot banners or bulk replay.
 
 ### 6) Validation and Regression Testing
 
-- [ ] Add/adjust unit tests for persistence and restore order.
+- [ ] Add/adjust unit tests for persistence and no-replay startup behavior.
 - [ ] Run `pnpm lint`.
 - [ ] Run `pnpm typecheck`.
 - [ ] Run `pnpm check:all`.
