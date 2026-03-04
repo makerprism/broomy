@@ -11,7 +11,7 @@ concurrency:
 
 jobs:
   scroll-stress:
-    runs-on: self-hosted
+    runs-on: ubicloud-standard-2
     timeout-minutes: 45
 
     steps:
